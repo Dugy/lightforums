@@ -34,6 +34,9 @@ namespace lightforums {
 		static Wt::WContainerWidget* makeGuestOverview(const std::string& name);
 		Wt::WContainerWidget* show(const std::string& viewer);
 		void digestPost(std::shared_ptr<post> digested);
+		void ratePost(std::shared_ptr<post> rated, rating rate);
+
+		static bool validateUsername(const std::string& name, bool warn = true);
 
 		std::string getTitle();
 		void setTitle(const std::string& newName) { title_ = std::make_shared<std::string>(newName); }

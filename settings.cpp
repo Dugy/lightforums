@@ -56,24 +56,29 @@ void lightforums::Settings::setup(rapidxml::xml_node<>* from) {
 		if (!node) target = std::make_shared<std::string>(preset);
 		else target = std::make_shared<std::string>(node->value());
 	};
-	std::function<void(rank&, rank, const char*, tr::translatable)> doOnRank = [&] (rank& target, rank preset, const char* field, tr::translatable description) {
+	std::function<void(unsigned char*, unsigned char, const char*, tr::translatable, unsigned char, tr::translatable)> doOnEnum = [&] (unsigned char* target, unsigned char preset, const char* field, tr::translatable description, unsigned char elements, tr::translatable first) {
 		if (!from) {
-			target = preset;
+			*target = preset;
 			return;
 		}
 		rapidxml::xml_node<>* node = from->first_node(field);
-		if (!node) target = preset;
-		else target = (rank)atoi(node->value());
+		if (!node) *target = preset;
+		else {
+			*target = atoi(node->value());
+			if (*target >= elements) *target = preset;
+		}
 	};
-	goThroughAll(doOnBool, doOnUint, doOnULint, doOnString, doOnRank);
+	goThroughAll(doOnBool, doOnUint, doOnULint, doOnString, doOnEnum);
 }
 
 rapidxml::xml_node<>* lightforums::Settings::save(rapidxml::xml_document<>* doc, std::vector<std::shared_ptr<std::string>>& strings) {
 	rapidxml::xml_node<>* made = doc->allocate_node(rapidxml::node_element, "settings");
 	auto appendNode = [&] (const char* field, const std::string& added) -> void {
 		std::shared_ptr<std::string> contents  = std::make_shared<std::string>(added);
+		std::shared_ptr<std::string> name  = std::make_shared<std::string>(field);
 		strings.push_back(contents);
-		made->append_node(doc->allocate_node(rapidxml::node_element, field, contents->c_str()));
+		strings.push_back(name);
+		made->append_node(doc->allocate_node(rapidxml::node_element, name->c_str(), contents->c_str()));
 	};
 	std::function<void(bool&, bool, const char*, tr::translatable)> doOnBool = [&] (bool& target, bool preset, const char* field, tr::translatable description) {
 		appendNode(field, std::to_string(target));
@@ -87,10 +92,10 @@ rapidxml::xml_node<>* lightforums::Settings::save(rapidxml::xml_document<>* doc,
 	std::function<void(std::shared_ptr<std::string>&, const char*, const char*, tr::translatable)> doOnString = [&] (std::shared_ptr<std::string>& target, const char* preset, const char* field, tr::translatable description) {
 		appendNode(field, *target);
 	};
-	std::function<void(rank&, rank, const char*, tr::translatable)> doOnRank = [&] (rank& target, rank preset, const char* field, tr::translatable description) {
-		appendNode(field, std::to_string((int)target));
+	std::function<void(unsigned char*, unsigned char, const char*, tr::translatable, unsigned char, tr::translatable)> doOnEnum = [&] (unsigned char* target, unsigned char preset, const char* field, tr::translatable description, unsigned char elements, tr::translatable first) {
+		appendNode(field, std::to_string((int)*target));
 	};
-	goThroughAll(doOnBool, doOnUint, doOnULint, doOnString, doOnRank);
+	goThroughAll(doOnBool, doOnUint, doOnULint, doOnString, doOnEnum);
 	return made;
 }
 
@@ -127,12 +132,12 @@ Wt::WContainerWidget* lightforums::Settings::edit(const std::string& viewer) {
 		grid->addWidget(makeEditableText(&target, result), line, 1);
 		line++;
 	};
-	std::function<void(rank&, rank, const char*, tr::translatable)> doOnRank = [&] (rank& target, rank preset, const char* field, tr::translatable description) {
+	std::function<void(unsigned char*, unsigned char, const char*, tr::translatable, unsigned char, tr::translatable)> doOnEnum = [&] (unsigned char* target, unsigned char preset, const char* field, tr::translatable description, unsigned char elements, tr::translatable first) {
 		grid->addWidget(new Wt::WText(Wt::WString(*tr::get(description)), result), line, 0);
-		grid->addWidget(makeRankEditor(&target, result), line, 1);
+		grid->addWidget(makeEnumEditor(target, elements, first, result), line, 1);
 		line++;
 	};
-	goThroughAll(doOnBool, doOnUint, doOnULint, doOnString, doOnRank);
+	goThroughAll(doOnBool, doOnUint, doOnULint, doOnString, doOnEnum);
 
 	Wt::WAnchor* showTranslation = new Wt::WAnchor(Wt::WLink(Wt::WLink::InternalPath, "/" TRANSLATION_PATH), Wt::WString(*lightforums::tr::get(lightforums::tr::CHANGE_TRANSLATION)), result);
 	grid->addWidget(showTranslation, line, 0);

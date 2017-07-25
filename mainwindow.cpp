@@ -11,6 +11,7 @@
 #include <WMessageBox>
 #include <Wt/Auth/HashFunction>
 #include <WEnvironment>
+#include <WBootstrapTheme>
 #include "user.h"
 #include "post.h"
 #include "translation.h"
@@ -42,7 +43,9 @@ mainWindow::mainWindow(const Wt::WEnvironment& env) :
 		}
 	} catch (std::runtime_error e) {}
 
-	useStyleSheet("css/style.css");
+//	setCssTheme("polished");
+//	useStyleSheet("css/style.css");
+//	setTheme(new Wt::WBootstrapTheme());
 
 	rebuild();
 }
@@ -115,7 +118,7 @@ void mainWindow::handlePathChange()
 		}
 	}
 	if (!content) {
-		content = root::get().getRootPost()->build("", 1);
+		content = root::get().getRootPost()->build(currentUser_, 1);
 		setTitle(Wt::WString(*std::atomic_load(&root::get().getRootPost()->title_)));
 	}
 	root()->addWidget(content);
@@ -216,7 +219,7 @@ void mainWindow::makeAuthBlock() {
 		}));
 	}
 
-	if (currentUser_.empty() && lightforums::Settings::get().canRegister || lightforums::userList::get().getUser(currentUser_)->rank_ == lightforums::ADMIN) {
+	if ((currentUser_.empty() && lightforums::Settings::get().canRegister) || lightforums::userList::get().getUser(currentUser_)->rank_ == lightforums::ADMIN) {
 		Wt::WPushButton* registerButton = new Wt::WPushButton(Wt::WString(*lightforums::tr::get(lightforums::tr::DO_REGISTER)), authContainer_);
 		authLayout->addWidget(registerButton);
 		registerButton->clicked().connect(std::bind([=] () {
@@ -250,14 +253,7 @@ void mainWindow::makeAuthBlock() {
 				if (found) Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::USERNAME_UNAVAILABLE), Wt::Ok);
 				else if (passwordEdit[0]->text() != passwordEdit[1]->text()) Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::PASSWORDS_DONT_MATCH), Wt::Ok);
 				else {
-					bool fine = true;
-					for (unsigned int i = 0; i < username.size(); i++) {
-						if ((username[i] >= 'A' && username[i] <= 'Z') || (username[i] >= 'a' && username[i] <= 'z') || (username[i] >= '0' && username[i] <= '9') || username[i] == '_') continue;
-						fine = false;
-						Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::LOGIN_ERROR), *lightforums::tr::get(lightforums::tr::USERNAME_ILLEGAL_CHARACTER), Wt::Ok);
-						break;
-					}
-					if (fine) {
+					if (lightforums::user::validateUsername(username)) {
 						std::shared_ptr<lightforums::user> made = std::make_shared<lightforums::user>();
 						made->name_ = std::make_shared<std::string>(username);
 						std::string salt = lightforums::safeRandomString();

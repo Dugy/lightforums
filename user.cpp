@@ -9,10 +9,14 @@
 #include <WInPlaceEdit>
 #include <WComboBox>
 #include <WLineEdit>
+#include <WPushButton>
+#include <WMessageBox>
+#include <Wt/Chart/WPieChart>
 #include <atomic>
 #include <rapidxml/rapidxml.hpp>
 #include "translation.h"
 #include "userlist.h"
+#include "settings.h"
 
 lightforums::user::user() :
 	posts_(0)
@@ -95,6 +99,14 @@ Wt::WContainerWidget* lightforums::user::makeOverview() const {
 	layout->addWidget(nameWidget);
 	layout->addWidget(titleWidget);
 	layout->addWidget(postsWidget);
+	if (Settings::get().postShowUserRating == Settings::SHOW_ALL) {
+		Wt::Chart::WPieChart* chart = makeRatingChart(rating_, result);
+		layout->addWidget(chart);
+	} else if (Settings::get().postShowUserRating == Settings::SHOW_SMALL) {
+		Wt::WText* ratingText = makeRatingOverview(rating_, result);
+		layout->addWidget(ratingText);
+	}
+	layout->addStretch(1);
 	return result;
 }
 
@@ -107,6 +119,7 @@ Wt::WContainerWidget* lightforums::user::makeGuestOverview(const std::string& na
 	layout->addSpacing(Wt::WLength::Auto);
 	layout->addWidget(nameWidget);
 	layout->addWidget(guestWidget);
+	layout->addStretch(1);
 	return result;
 }
 
@@ -120,7 +133,28 @@ Wt::WContainerWidget* lightforums::user::show(const std::string& viewer) {
 	outerBox->addWidget(gridContainer);
 	Wt::WGridLayout* grid = new Wt::WGridLayout(gridContainer);
 	grid->addWidget(new Wt::WText(Wt::WString(*tr::get(tr::USER_NAME)), gridContainer), 0, 0);
-	grid->addWidget(new Wt::WText(Wt::WString(*std::atomic_load(&name_)), gridContainer), 0, 1);
+
+	if (viewing && viewing->rank_ != ADMIN)
+		grid->addWidget(new Wt::WText(Wt::WString(*std::atomic_load(&name_)), gridContainer), 0, 1);
+	else {
+		Wt::WInPlaceEdit* nameEditor = new Wt::WInPlaceEdit(*std::atomic_load(&name_), gridContainer);
+		nameEditor->setPlaceholderText(Wt::WString(*tr::get(tr::DONT_KEEP_THIS_EMPTY)));
+		nameEditor->saveButton()->setText(Wt::WString(*tr::get(tr::SAVE_CHANGES)));
+		nameEditor->saveButton()->clicked().connect(std::bind([=] () {
+			const std::string& username = nameEditor->text().toUTF8();
+			if (validateUsername(username)) {
+				if (!userList::get().getUser(username)) {
+					userList::get().renameUser(userList::get().getUser(*name_), username);
+				} else {
+					 Wt::WMessageBox::show(*tr::get(tr::LOGIN_ERROR), *tr::get(tr::USERNAME_UNAVAILABLE), Wt::Ok);
+				}
+			}
+		}));
+		nameEditor->cancelButton()->setText(Wt::WString(*tr::get(tr::DISCARD_CHANGES)));
+		nameEditor->setToolTip(Wt::WString(*tr::get(tr::CLICK_TO_EDIT)));
+		grid->addWidget(nameEditor, 0, 1);
+	}
+
 	grid->addWidget(new Wt::WText(Wt::WString(*tr::get(tr::USER_TITLE)), gridContainer), 1, 0);
 	if (viewing && viewing->rank_ == ADMIN) {
 		Wt::WInPlaceEdit* rankEdit = makeEditableText(&title_, gridContainer);
@@ -132,7 +166,7 @@ Wt::WContainerWidget* lightforums::user::show(const std::string& viewer) {
 	grid->addWidget(new Wt::WText(Wt::WString(std::to_string(posts_)), gridContainer), 2, 1);
 	grid->addWidget(new Wt::WText(Wt::WString(*tr::get(tr::USER_RANK)), gridContainer), 3, 0);
 	if (viewing && viewing->rank_ == ADMIN)
-		grid->addWidget(makeRankEditor(&rank_, gridContainer), 3, 1);
+		grid->addWidget(makeEnumEditor((unsigned char*)&rank_, rankSize, tr::RANK_USER, gridContainer), 3, 1);
 	else
 		grid->addWidget(new Wt::WText(Wt::WString(*tr::get((tr::translatable)(tr::RANK_USER + rank_))), gridContainer), 3, 1);
 	grid->setColumnStretch(1, 1);
@@ -147,6 +181,11 @@ Wt::WContainerWidget* lightforums::user::show(const std::string& viewer) {
 	} else {
 		descrLayout->addWidget(new Wt::WText(Wt::WString(*std::atomic_load(&description_)), descrFrame), 1);
 	}
+
+	Wt::Chart::WPieChart* ratingChart = makeRatingChart(rating_, result);
+	ratingChart->setDisplayLabels(Wt::Chart::Outside | Wt::Chart::TextLabel |	Wt::Chart::TextPercentage);
+	ratingChart->resize(300, 300);
+	outerBox->addWidget(ratingChart);
 
 	return result;
 }
@@ -168,5 +207,43 @@ void lightforums::user::digestPost(std::shared_ptr<post> digested) {
 	}
 	for (auto it = digested->children_.begin(); it != digested->children_.end(); it++) {
 		digestPost(it->second);
+	}
+}
+
+bool lightforums::user::validateUsername(const std::string& name, bool warn) {
+	bool fine = true;
+	for (unsigned int i = 0; i < name.size(); i++) {
+		if ((name[i] >= 'A' && name[i] <= 'Z') || (name[i] >= 'a' && name[i] <= 'z') || (name[i] >= '0' && name[i] <= '9') || name[i] == '_') continue;
+		fine = false;
+		if (warn) Wt::WMessageBox::show(*tr::get(tr::LOGIN_ERROR), *tr::get(tr::USERNAME_ILLEGAL_CHARACTER), Wt::Ok);
+		break;
+	}
+	return fine;
+}
+
+void lightforums::user::ratePost(std::shared_ptr<post> rated, rating rate) {
+	postPath path(rated);
+	std::shared_ptr<std::string> writer = rated->author_;
+	std::shared_ptr<user> author = writer ? userList::get().getUser(*writer) : nullptr;
+	auto found = ratings_.find(path);
+	if (rate < ratingSize) {
+		if (found == ratings_.end()) {
+			if (author) author->rating_[rate]++;
+			rated->rating_[rate]++;
+			ratings_.insert(path, rate);
+		}
+		else {
+			if (author) author->rating_[found->second]--;
+			rated->rating_[found->second]--;
+			found->second = rate;
+			if (author) author->rating_[rate]++;
+			rated->rating_[rate]++;
+		}
+	} else {
+		if (found != ratings_.end()) {
+			if (author) author->rating_[found->second]--;
+			rated->rating_[found->second]--;
+		}
+		ratings_.erase(path);
 	}
 }

@@ -15,6 +15,10 @@ lightforums::tr::tr()
 	original_[SET_CAN_DELETE_OWN] = "Minimal rank to delete one's own posts";
 	original_[SET_CAN_EDIT_OTHER] = "Minimal rank to edit others' posts";
 	original_[SET_ALLOW_REGISTER] = "Allow new users to register";
+	original_[SET_POST_SHOW_RATING] = "Show post's rating";
+	original_[SET_POST_SHOW_USER_RATING] = "Show poster's rating in post";
+	original_[SET_PROFILE_SHOW_USER_RATING] = "Show user's rating on profile";
+	original_[SET_COLOURISE_SMALL_RATING] = "Colourise inline rating";
 	original_[SHOW_POSTS] = "Posts: X";
 	original_[SHOW_GUEST] = "Guest";
 	original_[SHOW_REPLIES] = "Show X replies";
@@ -66,6 +70,31 @@ lightforums::tr::tr()
 	original_[RANK_VALUED_USER] = "Valued user";
 	original_[RANK_MODERATOR] = "Moderator";
 	original_[RANK_ADMIN] = "Administrator";
+	original_[COLOUR_GREEN] = "green";
+	original_[COLOUR_GREY] = "grey";
+	original_[COLOUR_BLUE] = "blue";
+	original_[COLOUR_RED] = "red";
+	original_[COLOUR_PURPLE] = "purple";
+	original_[COLOUR_ORANGE] = "orange";
+	original_[COLOUR_BLACK] = "black";
+	original_[COLOUR_CYAN] = "cyan";
+	original_[COLOUR_YELLOW] = "yellow";
+	original_[COLOUR_WHITE] = "white";
+	original_[RATE_USEFUL] = "useful";
+	original_[RATE_FUNNY] = "funny";
+	original_[RATE_INTERESTING] = "interesting";
+	original_[RATE_BAD_ADVICE] = "bad advice";
+	original_[RATE_ANNOYING] = "annoying";
+	original_[RATE_OFFTOPIC] = "offtopic";
+	original_[RATE_NECROMANTIC] = "thread necromancy";
+	original_[RATING_SHOW_ALL] = "Show the pie chart";
+	original_[RATING_SHOW_SMALL] = "Show it inline";
+	original_[RATING_SHOW_NOT] = "Don't show";
+	original_[RATING_TITLE] = "Rate type";
+	original_[RATING_VALUE] = "Number of ratings";
+	original_[NOT_RATED_YET] = "unrated";
+	original_[RATED_AS_X] = "Rating: X%";
+	original_[SPOILER_TITLE] = "Spoiler:";
 }
 
 void  lightforums::tr::init(rapidxml::xml_node<char>* source) {

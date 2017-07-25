@@ -5,10 +5,269 @@
 #include <WInPlaceEdit>
 #include <WPushButton>
 #include <WComboBox>
+#include <WColor>
+#include <WPen>
+#include <Wt/Chart/WPieChart>
+#include <Wt/Chart/WChartPalette>
+#include <WStandardItemModel>
+#include <WStandardItem>
+#include <WPanel>
+#include <WAnimation>
+#include "settings.h"
 #include "translation.h"
 
 void lightforums::formatString(const std::string& str, Wt::WContainerWidget* into) {
-	new Wt::WText(Wt::WString(str), into);
+	enum markup : unsigned int {
+		PLAIN = 0x0,
+		HEADING = 0x1,
+		SPOILER = 0x2,
+		ITALIC = 0x4,
+		BOLD = 0x8,
+		CODE = 0x10,
+		STRIKETHROUGH = 0x20,
+		SUBSCRIPT = 0x40,
+		SUPERSCRIPT = 0x80,
+		LINK = 0x100,
+	};
+	struct node {
+		markup style;
+		std::string text;
+		std::string path;
+		std::vector<node> deeper;
+		node(const std::string& source, markup styleOutside = PLAIN, std::string linkPath = "") : style(styleOutside) {
+			if (styleOutside == CODE) {
+				text = source;
+				return;
+			}
+			path = linkPath;
+			std::pair<char, markup> pairMarkups[] = {{'_', ITALIC}, {'*', BOLD}, {'-', STRIKETHROUGH}, {'^', SUPERSCRIPT}, {'~', SUBSCRIPT}};
+			auto getMarkup = [&] (const char character) -> markup {
+				for (int i = 0; i < 5; i++) if (character == pairMarkups[i].first) return pairMarkups[i].second;
+				return PLAIN; // PLAIN == 0 == false
+			};
+
+			std::string soFar;
+			auto pushSoFar = [&] () -> void {
+				if (soFar.empty()) return;
+				deeper.push_back(node(soFar, PLAIN));
+				soFar.clear();
+			};
+			auto increment = [&] (const char*& str) { // special decrement/increment to deal with code
+				str++;
+				if (*str == '`' && (str == source.c_str() || str[-1] != '//')) {
+					do str++; while (*str != '`' || (str != source.c_str() && str[-1] != '//'));
+					str++;
+				}
+			};
+			auto decrement = [&] (const char*& str) {
+				if (str > source.c_str()) str--;
+				if (*str == '`' && str[-1] != '\\') {
+					do str--; while ((*str != '`' || (str != source.c_str() && str[-1] != '//')) && str > source.c_str());
+					str--;
+				}
+			};
+
+			for (const char* str = source.c_str(); *str; increment(str)) {
+				if ((str == source.c_str() || str[-1] == '\n') && *str == '=') {
+					pushSoFar();
+					const char* strIn = str + 1;
+					for ( ; *strIn && (*strIn != '\n' || strIn[-1] == '\\'); increment(strIn)) {
+						soFar.push_back(*strIn);
+					}
+					if (!*strIn) continue;
+					deeper.push_back(node(soFar, HEADING, path));
+					soFar.clear();
+					str = strIn;
+				} else if ((str == source.c_str() || str[-1] != '\\') && *str == '{') {
+					pushSoFar();
+					const char* strIn = str + 1;
+					int depth = 0;
+					for ( ; *strIn; increment(strIn)) {
+						if (*strIn == '{' && strIn[-1] != '\\') depth++;
+						if (*strIn == '}' && strIn[-1] != '\\') {
+							if (!depth) break;
+							else depth--;
+						}
+						soFar.push_back(*strIn);
+					}
+					if (!*strIn) continue;
+					deeper.push_back(node(soFar, SPOILER, path));
+					soFar.clear();
+					str = strIn;
+				}
+				else if ((str == source.c_str() || str[-1] != '\\') && *str == '[') {
+					pushSoFar();
+					const char* strIn = str + 1;
+					int depth = 0;
+					for ( ; *strIn; increment(strIn)) {
+						if (*strIn == '[' && strIn[-1] != '\\') depth++;
+						if (*strIn == '|' && strIn[-1] != '\\') {
+							if (!depth) break;
+							else depth--;
+						}
+						soFar.push_back(*strIn);
+					}
+					if (!*strIn) continue;
+					str = strIn + 1;
+					std::string foundPath;
+					for ( ; *str && *str != ']'; str++) foundPath.push_back(*str);
+					deeper.push_back(node(soFar, LINK, foundPath));
+					soFar.clear();
+				} else {
+					if (str == source.c_str() || str[-1] == ' ' || str[-1] == '\t' || str[-1] == '\n') {
+						markup got = getMarkup(*str);
+						if (got) {
+							bool isMarkup = false;
+							for (const char* innerIt = str + 1; *innerIt != ' ' && *innerIt != '\t' && *innerIt != '\n'; increment(innerIt)) {
+								if (!getMarkup(*innerIt)) {
+									isMarkup = true;
+									break;
+								}
+							}
+							if (isMarkup) {
+								for (const char* innerIt = str; *innerIt; increment(innerIt)) {
+									if (*innerIt == *str && (innerIt[1] == ' ' || innerIt[1] == '\t' || innerIt[1] == '\n' || innerIt[1] == '.' || innerIt[1] == ','
+															 || innerIt[1] == ';' || innerIt[1] == '?' || innerIt[1] == '!' || innerIt[1] == 0) && innerIt[-1] != '\\') {
+										isMarkup = false;
+										for (const char* innerInnerIt = innerIt; innerInnerIt > str; decrement(innerInnerIt)) {
+											if (*innerIt == ' ' || *innerIt == '\n' || *innerIt == '\t') break;
+											else if (!getMarkup(*innerInnerIt)) {
+												isMarkup = true;
+												break;
+											}
+										}
+										if (isMarkup) {
+											std::string added;
+											for ( str++ ; str != innerIt; increment(str)) added.push_back(*str);
+											pushSoFar();
+											deeper.push_back(node(added, got));
+											break;
+										} else soFar.push_back(*str);
+									}
+								}
+							} else soFar.push_back(*str);
+						} else soFar.push_back(*str);
+					} else if (*str == '`' && (str == source.c_str() || str[-1] != '\\')) {
+						str++;
+						std::string added;
+						for ( ; *str != '`'; str++) added.push_back(*str);
+						pushSoFar();
+						deeper.push_back(node(added, CODE));
+					} else soFar.push_back(*str);
+				}
+			}
+
+			if (deeper.empty()) text.swap(soFar);
+			else pushSoFar();
+		}
+		void chew() {
+			if (text.empty()) {
+				for (unsigned int i = 0; i < deeper.size(); i++) deeper[i].chew();
+			} else {
+				std::string newText;
+				for (const char* str = text.c_str(); *str; str++) {
+					if (*str == '\n') {
+						newText.append("<br/>");
+					} else if (*str == '\\' && (str[1] == '_' || str[1] == '*' || str[1] == '-' || str[1] == '~' || str[1] == '-' || str[1] == '`')) {}
+					else newText.push_back(*str);
+				}
+				text.swap(newText);
+			}
+		}
+
+		void construct(Wt::WContainerWidget *into, unsigned int flags = 0x0) {
+			if (deeper.empty()) {
+				std::string prefix;
+				std::string suffix;
+				if (flags & CODE) { prefix += "<tt>"; suffix = "</tt>" + suffix; }
+				if (flags & ITALIC) { prefix += "<em>"; suffix = "</em>" + suffix; }
+				if (flags & BOLD) { prefix += "<strong>"; suffix = "</strong>"  + suffix; }
+				if (flags & STRIKETHROUGH) { prefix += "<strike>"; suffix = "</strike>" + suffix; }
+				if (flags & SUPERSCRIPT) { prefix += "<sup>"; suffix = "</sup>" + suffix; }
+				if (flags & SUBSCRIPT) { prefix += "<sub>"; suffix = "</sub>" + suffix; }
+				if (flags & HEADING) { prefix += "<h1>"; suffix = "</h1>" + suffix; }
+				if (flags & LINK) {
+					new Wt::WAnchor(Wt::WLink(path), Wt::WString(prefix + text + suffix), into);
+				} else new Wt::WText(Wt::WString(prefix + text + suffix), into);
+			} else {
+				for (unsigned int i = 0; i < deeper.size(); i++) {
+					if (deeper[i].style == PLAIN) deeper[i].construct(into, flags); // Most common, let it be dealt with easily
+					else if (deeper[i].style == SPOILER) {
+						Wt::WPanel* panel = new Wt::WPanel(into);
+						panel->setTitle(Wt::WString(*tr::get(tr::SPOILER_TITLE)));
+						panel->setCollapsible(true);
+						Wt::WAnimation animation(Wt::WAnimation::SlideInFromTop, Wt::WAnimation::EaseOut, 100);
+						panel->setAnimation(animation);
+						Wt::WContainerWidget* container = new Wt::WContainerWidget(into);
+						deeper[i].construct(container, flags);
+						panel->setCentralWidget(container);
+						panel->setCollapsed(true);
+					} else {
+						deeper[i].construct(into, flags ^ deeper[i].style);
+					}
+				}
+			}
+
+		}
+
+		std::string print() {
+			std::string result;
+			if (deeper.empty()) result = text;
+			else for (unsigned int i = 0; i < deeper.size(); i++) {
+				result += deeper[i].print();
+			}
+			switch (style) {
+				case CODE:
+					return "<tt>" + result + "</tt>";
+				case ITALIC:
+					return "<em>" + result + "</em>";
+				case BOLD:
+					return "<strong>" + result + "</strong>";
+				case STRIKETHROUGH:
+					return "<strike>" + result + "</strike>";
+				case SUPERSCRIPT:
+					return "<sup>" + result + "</sup>";
+				case SUBSCRIPT:
+					return "<sub>" + result + "</sub>";
+				default:
+					return result;
+			}
+		}
+
+//		void construct(Wt::WContainerWidget* into) {
+//			// Some structures can be only identified by the root, so root will specifically work with them
+//			if (deeper.empty()) {
+//				new Wt::WText(Wt::WString(text), into);
+//				return;
+//			}
+//			for (unsigned int i = 0; i < deeper.size(); i++) {
+//				if (deeper[i].style == PLAIN) new Wt::WText(Wt::WString(deeper[i].print()), into); // Most common, let it be dealt with easily
+//				else if (deeper[i].style == HEADING) new Wt::WText(Wt::WString("<h1>" + deeper[i].print() + "</h1>"), into);
+//				else if (deeper[i].style == BULLET) {
+//					std::string composed = "<ul>";
+//					for ( ; i < deeper.size() && deeper[i].style == BULLET; i++) {
+//						composed += "<li>" + deeper[i].print() + "</li>";
+//					}
+//					i--;
+//					new Wt::WText(Wt::WString(composed + "</ul>"), into);
+//					continue;
+//				} else if (deeper[i].style == SPOILER) {
+//					Wt::WPanel* panel = new Wt::WPanel(into);
+//					panel->setTitle(Wt::WString(*tr::get(tr::SPOILER_TITLE)));
+//					panel->setCollapsible(true);
+//					Wt::WAnimation animation(Wt::WAnimation::SlideInFromTop, Wt::WAnimation::EaseOut, 100);
+//					panel->setAnimation(animation);
+//					panel->setCentralWidget(new Wt::WText(deeper[i].print()));
+//				} else {
+//					new Wt::WText(Wt::WString(deeper[i].print()), into);
+//				}
+//			}
+//		}
+	};
+
+	node parsed(str);
+	parsed.chew();
+	parsed.construct(into);
 }
 
 Wt::WInPlaceEdit* lightforums::makeEditableText(std::shared_ptr<std::string>* target, Wt::WContainerWidget* parent) {
@@ -47,23 +306,116 @@ Wt::WInPlaceEdit* lightforums::makeEditableNumber(unsigned int* target, Wt::WCon
 	return result;
 }
 
-Wt::WComboBox* lightforums::makeRankEditor(rank* changed, Wt::WContainerWidget* parent) {
+Wt::WComboBox* lightforums::makeEnumEditor(unsigned char* changed, unsigned char elements, unsigned int first, Wt::WContainerWidget* parent) {
 	Wt::WComboBox* result = new Wt::WComboBox(parent);
-	result->addItem(*tr::get(tr::RANK_USER));
-	result->addItem(*tr::get(tr::RANK_VALUED_USER));
-	result->addItem(*tr::get(tr::RANK_MODERATOR));
-	result->addItem(*tr::get(tr::RANK_ADMIN));
+	for (unsigned int i = 0; i < elements; i++) {
+		result->addItem(*tr::get((tr::translatable)(first + i)));
+	}
+
 	result->setCurrentIndex(*changed);
 	result->changed().connect(std::bind([=] () {
-		*changed = (rank)result->currentIndex();
+		*changed = result->currentIndex();
 	}));
 	return result;
+}
+
+namespace lightforums {
+
+	Wt::WStandardItemModel* makeModel(const std::atomic_int* data, Wt::WContainerWidget* parent) {
+		Wt::WStandardItemModel* model = new Wt::WStandardItemModel(parent);
+		//model->setItemPrototype(new NumericItem());
+
+		model->insertColumns(model->columnCount(), 2);
+		model->setHeaderData(0, Wt::WString(*tr::get(tr::RATING_TITLE)));
+		model->setHeaderData(1, Wt::WString(*tr::get(tr::RATING_VALUE)));
+
+		Settings& settings = Settings::get();
+		std::vector<rating> available;
+		for (unsigned int i = 0; i < (unsigned int)ratingSize; i++) {
+			if (settings.canBeRated[i] && data[i].load() != 0) available.push_back((rating)i);
+		}
+		model->insertRows(model->rowCount(), available.size());
+		for (unsigned int i = 0; i < available.size(); i++) {
+			model->setData(i, 0, Wt::WString(*tr::get((tr::translatable)(tr::RATE_USEFUL + available[i]))));
+			model->setData(i, 1, data[available[i]].load());
+		}
+
+		return model;
+	}
+
+	class ratingPalette : public Wt::Chart::WChartPalette {
+		std::vector<rating> available_;
+	public:
+		ratingPalette() : Wt::Chart::WChartPalette() {
+			Settings& settings = Settings::get();
+			std::vector<rating> available;
+			for (unsigned int i = 0; i < (unsigned int)ratingSize; i++) {
+				if (settings.canBeRated[i]) available.push_back((rating)i);
+			}
+		}
+
+		virtual Wt::WBrush brush(int index) {
+			return Wt::WBrush(getColour(Settings::get().rateColour[available_[index]]));
+		}
+		virtual Wt::WPen borderPen(int index) {
+			return Wt::WPen(Wt::black);
+		}
+		virtual Wt::WPen strokePen(int index) {
+			return Wt::WPen(Wt::black);
+		}
+		virtual Wt::WColor fontColor(int index) {
+			return getColour(Settings::get().rateColour[available_[index]]);
+		}
+		virtual ~ratingPalette() { }
+	};
+}
+
+Wt::Chart::WPieChart* lightforums::makeRatingChart(const std::atomic_int* data, Wt::WContainerWidget* parent) {
+	Wt::Chart::WPieChart* chart = new Wt::Chart::WPieChart(parent);
+	chart->setModel(makeModel(data, parent));
+	chart->setLabelsColumn(0);
+	chart->setDataColumn(1);
+	chart->setPerspectiveEnabled(true, 0.2);
+	chart->setShadowEnabled(true);
+	chart->resize(100, 100);
+//	chart->setDisplayLabels(Wt::Chart::Outside |
+//							Wt::Chart::TextLabel |
+//							Wt::Chart::TextPercentage);
+	//chart->setMargin(10, Wt::Top | Wt::Bottom);
+	//chart->setMargin(Wt::WLength::Auto, Wt::Left | Wt::Right);
+	return chart;
+}
+
+Wt::WText* lightforums::makeRatingOverview(const std::atomic_int* data, Wt::WContainerWidget* parent) {
+	int sum = 0;
+	int good = 0;
+	rating predominant;
+	int max = 0;
+	for (unsigned int i = 0; i < ratingSize; i++) {
+		sum += data[i];
+		if (i <= INTERESTING_POST) good += data[i];
+		if (data[i] > max) {
+			predominant = (rating)i;
+			max = data[i];
+		}
+	}
+	if (sum == 0) return new Wt::WText(Wt::WString(*tr::get(tr::NOT_RATED_YET)), parent);
+	int goodPercentage = (good * 100) / sum;
+
+	std::string text;
+	if (Settings::get().colouriseSmallRating) {
+		Wt::WColor colour = getColour(Settings::get().rateColour[predominant]);
+		text += "<font color=\"rgb(" + std::to_string(colour.red()) + "," + std::to_string(colour.green()) + "," + std::to_string(colour.blue()) + "\">";
+	}
+	text += replaceVar(*tr::get(tr::RATED_AS_X), 'X', goodPercentage);
+	if (Settings::get().colouriseSmallRating) text += "</font>";
+	return new Wt::WText(Wt::WString(text), parent);
 }
 
 std::string lightforums::replaceVar(const std::string& str, char X, int x) {
 	std::string result;
 	for (unsigned int i = 0; i < str.size(); i++) {
-		if (str[i] == X && (i == 0 || str[i - 1] == ' ') && (str[i + 1] == 0 || str[i + 1] == ' ')) {
+		if (str[i] == X && (i == 0 || str[i - 1] == ' ') && (str[i + 1] == 0 || str[i + 1] == ' ' || str[i + 1] == '%')) {
 			result += std::to_string(x);
 		} else
 			result.push_back(str[i]);
@@ -74,7 +426,7 @@ std::string lightforums::replaceVar(const std::string& str, char X, int x) {
 std::string lightforums::replaceVar(const std::string& str, char X, const std::string& x) {
 	std::string result;
 	for (unsigned int i = 0; i < str.size(); i++) {
-		if (str[i] == X && (i == 0 || str[i - 1] == ' ') && (str[i + 1] == 0 || str[i + 1] == ' ')) {
+		if (str[i] == X && (i == 0 || str[i - 1] == ' ') && (str[i + 1] == 0 || str[i + 1] == ' ' || str[i + 1] == '%')) {
 			result += x;
 		} else
 			result.push_back(str[i]);
@@ -97,6 +449,12 @@ std::vector<std::string> lightforums::splitString(const std::string& splitted, c
 	}
 	if (result.back().empty()) result.pop_back();
 	return result;
+}
+
+const Wt::WColor& lightforums::getColour(colour col) {
+	if (col >= colourSize) throw(std::runtime_error("Weird colour requested"));
+	static const Wt::WColor colours[] = {Wt::green, Wt::gray, Wt::blue, Wt::red, Wt::WColor(255, 0, 255), Wt::WColor(255, 128, 0), Wt::black, Wt::cyan, Wt::yellow, Wt::white};
+	return colours[col];
 }
 
 static const std::string b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

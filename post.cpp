@@ -12,6 +12,8 @@
 #include <WLineEdit>
 #include <WDialog>
 #include <WMessageBox>
+#include <WComboBox>
+#include <Wt/Chart/WPieChart>
 #include "settings.h"
 #include "translation.h"
 #include "userlist.h"
@@ -150,7 +152,6 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 	Wt::WContainerWidget* textArea = new Wt::WContainerWidget(result);
 	layout->addWidget(textArea, 0, 1);
 	Wt::WVBoxLayout* textLayout = new Wt::WVBoxLayout(textArea);
-	Wt::WContainerWidget* text = new Wt::WContainerWidget(textArea);
 
 	Wt::WContainerWidget* titleContainer = new Wt::WContainerWidget(textArea);
 	Wt::WHBoxLayout* titleLayout = new Wt::WHBoxLayout(titleContainer);
@@ -158,6 +159,16 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 	Wt::WAnchor* titleWidget = new Wt::WAnchor(Wt::WLink(Wt::WLink::InternalPath, "/" POST_PATH_PREFIX "/" + postPath(self()).getString()), Wt::WString(*std::atomic_load(&title_)), textArea);
 	titleLayout->addWidget(titleWidget);
 	titleLayout->addStretch(1);
+
+	Wt::WContainerWidget* nextToTextArea;
+	Wt::WHBoxLayout* nextToTextLayout;
+	bool showChart = (Settings::get().postShowRating == Settings::SHOW_ALL);
+	if (showChart) {
+		nextToTextArea = new Wt::WContainerWidget(textArea);
+		nextToTextLayout = new Wt::WHBoxLayout(nextToTextArea);
+		textLayout->addWidget(nextToTextArea);
+	}
+	Wt::WContainerWidget* text = new Wt::WContainerWidget(showChart ? nextToTextArea : textArea);
 
 	std::shared_ptr<post> ptrToSelf = self(); // To prevent the post from being distroyed at inappropriate time
 
@@ -221,8 +232,18 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 			}
 		}));
 	}
+
 	formatString(*std::atomic_load(&text_), text);
-	textLayout->addWidget(text);
+	if (showChart) nextToTextLayout->addWidget(text, 1);
+	else textLayout->addWidget(text, 1);
+
+	if (showChart) {
+		Wt::Chart::WPieChart* chart = makeRatingChart(rating_, nextToTextArea);
+		nextToTextLayout->addWidget(chart, 0);
+	} else if (Settings::get().postShowRating == Settings::SHOW_SMALL) {
+		Wt::WText* ratingText = makeRatingOverview(rating_, titleContainer);
+		titleLayout->addWidget(ratingText);
+	}
 
 	std::shared_ptr<post> copy = self();
 	Wt::WContainerWidget* replyArea = new Wt::WContainerWidget(textArea);
@@ -269,6 +290,8 @@ void lightforums::post::showChildren(std::string viewer, Wt::WContainerWidget* c
 	Wt::WContainerWidget* buttonsContainer = new Wt::WContainerWidget(container);
 	layoutV->addWidget(buttonsContainer);
 	Wt::WHBoxLayout* layoutH = new Wt::WHBoxLayout(buttonsContainer);
+	Wt::WComboBox* ratingCombo = makeRatingCombo(viewer, buttonsContainer, from);
+	if (ratingCombo) layoutH->addWidget(ratingCombo);
 
 	Wt::WPushButton* hideRepliesButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(tr::HIDE_REPLIES), 'X', from->children_.size())), buttonsContainer);
 	layoutH->addWidget(hideRepliesButton);
@@ -289,6 +312,7 @@ void lightforums::post::showChildren(std::string viewer, Wt::WContainerWidget* c
 
 void lightforums::post::hideChildren(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from) {
 	container->clear();
+	makeRatingCombo(viewer, container, from);
 	if (from->children_.size() > 0) {
 		Wt::WPushButton* showRepliesButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(tr::SHOW_REPLIES), 'X', from->children_.size())), container);
 		showRepliesButton->clicked().connect(std::bind([=] () {
@@ -353,4 +377,25 @@ Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::
 		dialog->show();
 	}));
 	return replyButton;
+}
+
+Wt::WComboBox* lightforums::post::makeRatingCombo(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from) {
+	std::shared_ptr<user> viewing = userList::get().getUser(viewer);
+	std::cerr << "Viewer " << viewer << std::endl;
+	if (!viewing) return nullptr;
+	Wt::WComboBox* made = new Wt::WComboBox(container);
+	std::vector<rating> available;
+	auto ratingFound = viewing->ratings_.find(from);
+	for (unsigned int i = 0; i < (unsigned int)ratingSize; i++) if (Settings::get().canBeRated[i]) {
+		made->addItem(*tr::get((tr::translatable)(tr::RATE_USEFUL + i)));
+		available.push_back((rating)i);
+		if (ratingFound != viewing->ratings_.end() && ratingFound->second == i) made->setCurrentIndex(available.size() - 1);
+	}
+	made->addItem(*tr::get(tr::NOT_RATED_YET));
+	if (ratingFound == viewing->ratings_.end()) made->setCurrentIndex(available.size());
+	available.push_back(ratingSize);
+	made->changed().connect(std::bind([=] () {
+		viewing->ratePost(from, available[made->currentIndex()]);
+	}));
+	return made;
 }

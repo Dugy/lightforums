@@ -63,6 +63,7 @@ namespace lightforums {
 			path_ = new unsigned char[size_];
 			for (unsigned int i = 0; i < size_; i++) path_[i] = other.path_[i];
 		}
+
 		~postPath() {
 			delete[] path_;
 		}
@@ -104,6 +105,7 @@ namespace lightforums {
 				if (path_[i] != other.path_[i]) return false;
 			return true;
 		}
+		bool operator!= (const postPath& other) const { return !operator ==(other); }
 
 		friend class std::hash<postPath>;
 	};
@@ -132,12 +134,14 @@ namespace lightforums {
 		std::string getLink();
 		std::shared_ptr<post> getParent() { return parent_; }
 
+	private:
+
 		static void showChildren(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from, unsigned int depth);
 		static void hideChildren(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from);
 		static void addReplyMenu(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from);
 		static Wt::WPushButton* addReplyButton(tr::translatable title, std::string viewer, Wt::WContainerWidget* container, Wt::WContainerWidget* buttonContainer, std::shared_ptr<post> from);
+		static Wt::WComboBox* makeRatingCombo(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from);
 
-	private:
 		std::shared_ptr<post> parent_;
 		unsigned long int id_;
 		void setRatings();

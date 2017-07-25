@@ -38,9 +38,11 @@ void lightforums::userList::digestPost(std::shared_ptr<post> digested) {
 }
 
 bool lightforums::userList::renameUser(std::shared_ptr<user> who, const std::string& newName) {
+	const std::string& oldName = *who->name_;
 	auto found = users_.find(newName);
 	if (found != users_.end()) return false; // Exists
 	users_.insert(newName, who);
+	users_.erase(oldName);
 	std::shared_ptr<std::string> renamed = std::make_shared<std::string>(newName);
 	std::atomic_store(&who->name_, renamed);
 	return true;

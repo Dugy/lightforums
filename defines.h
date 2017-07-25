@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include <random>
+#include <atomic>
 
 #define ALL_PATH_PREFIX "?_="
 #define POST_PATH_PREFIX "post"
@@ -25,18 +26,24 @@ namespace Wt {
 	class WVBoxLayout;
 	class WInPlaceEdit;
 	class WComboBox;
+	class WColor;
+	class WText;
+	namespace Chart {
+		class WPieChart;
+	}
 }
 
 namespace lightforums {
 
-	enum rank {
+	enum rank : unsigned char {
 		USER, // Standard rights
 		VALUED_USER, // Slightly elevated rights
 		MODERATOR, // All rights but change global settings
-		ADMIN // All rights
+		ADMIN, // All rights
+		rankSize
 	};
 
-	enum rating : char {
+	enum rating : unsigned char {
 		// Upvote
 		USEFUL_POST, // Useful information
 		FUNNY_POST, // Not useful, but humorous and worth it
@@ -49,6 +56,20 @@ namespace lightforums {
 		ratingSize
 	};
 
+	enum colour : unsigned char {
+		GREEN,
+		GREY,
+		BLUE,
+		RED,
+		PURPLE,
+		ORANGE,
+		BLACK,
+		CYAN,
+		YELLOW,
+		WHITE,
+		colourSize
+	};
+
 	void formatString(const std::string& str, Wt::WContainerWidget* into);
 	std::string replaceVar(const std::string& str, char X, int x);
 	inline std::string replaceVar(std::shared_ptr<const std::string> str, char X, int x) { return replaceVar(*str, X, x); }
@@ -58,7 +79,10 @@ namespace lightforums {
 	Wt::WInPlaceEdit* makeEditableText(std::shared_ptr<std::string>* target, Wt::WContainerWidget* parent); // Pointer to the shared_ptr that will be changed by editing
 	Wt::WInPlaceEdit* makeEditableNumber(unsigned long int* target, Wt::WContainerWidget* parent);
 	Wt::WInPlaceEdit* makeEditableNumber(unsigned int* target, Wt::WContainerWidget* parent);
-	Wt::WComboBox* makeRankEditor(rank* changed, Wt::WContainerWidget* parent);
+	Wt::WComboBox* makeEnumEditor(unsigned char* changed, unsigned char elements, unsigned int first, Wt::WContainerWidget* parent);
+	Wt::Chart::WPieChart* makeRatingChart(const std::atomic_int* data, Wt::WContainerWidget* parent);
+	Wt::WText* makeRatingOverview(const std::atomic_int* data, Wt::WContainerWidget* parent);
+	const Wt::WColor& getColour(colour col);
 
 	std::string toBase64(const std::string& from);
 	std::string fromBase64(const std::string& from);
