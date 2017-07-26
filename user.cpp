@@ -70,8 +70,10 @@ rapidxml::xml_node<char>* lightforums::user::getNode(rapidxml::xml_document<char
 	made->append_attribute(saveString("name", name_));
 	made->append_attribute(saveString("password", password_));
 	made->append_attribute(saveString("salt", salt_));
-	strings.push_back(description_);
-	made->append_node(doc->allocate_node(rapidxml::node_element, "description", description_->c_str()));
+	if (description_) {
+		strings.push_back(description_);
+		made->append_node(doc->allocate_node(rapidxml::node_element, "description", description_->c_str()));
+	}
 	made->append_attribute(saveNumber("rank", (int)rank_));
 	rapidxml::xml_node<>* ratings = doc->allocate_node(rapidxml::node_element, "ratings");
 	for (auto it = ratings_.begin(); it != ratings_.end(); it++) {

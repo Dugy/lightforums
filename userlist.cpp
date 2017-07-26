@@ -26,7 +26,8 @@ void lightforums::userList::setupUserList(rapidxml::xml_node<>* from) {
 rapidxml::xml_node<>* lightforums::userList::save(rapidxml::xml_document<>* doc, std::vector<std::shared_ptr<std::string>>& strings) {
 	rapidxml::xml_node<>* result = doc->allocate_node(rapidxml::node_element, "users");
 	for (auto it = users_.begin(); it != users_.end(); it++) {
-		result->append_node(it->second->getNode(doc, strings));
+		rapidxml::xml_node<>* node = it->second->getNode(doc, strings);
+		result->append_node(node);
 	}
 	return result;
 }
