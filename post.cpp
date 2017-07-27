@@ -145,15 +145,20 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 	std::shared_ptr<user> author = userList::get().getUser(*authorName);
 	Wt::WContainerWidget* result = new Wt::WContainerWidget();
 	Wt::WGridLayout* layout = new Wt::WGridLayout(result);
-	Wt::WContainerWidget* authorWidget = author ? author->makeOverview() : user::makeGuestOverview(*authorName);
-	result->addWidget(authorWidget);
-	layout->addWidget(authorWidget, 0, 0);
+
+	if (!authorName->empty()) {
+		result->setStyleClass("lightforums-postframe");
+		Wt::WContainerWidget* authorWidget = author ? author->makeOverview() : user::makeGuestOverview(*authorName);
+		result->addWidget(authorWidget);
+		layout->addWidget(authorWidget, 0, 0);
+	}
 
 	Wt::WContainerWidget* textArea = new Wt::WContainerWidget(result);
 	layout->addWidget(textArea, 0, 1);
 	Wt::WVBoxLayout* textLayout = new Wt::WVBoxLayout(textArea);
 
 	Wt::WContainerWidget* titleContainer = new Wt::WContainerWidget(textArea);
+	titleContainer->setStyleClass("lightforums-titlebar");
 	Wt::WHBoxLayout* titleLayout = new Wt::WHBoxLayout(titleContainer);
 	textLayout->addWidget(titleContainer);
 	Wt::WAnchor* titleWidget = new Wt::WAnchor(Wt::WLink(Wt::WLink::InternalPath, "/" POST_PATH_PREFIX "/" + postPath(self()).getString()), Wt::WString(*std::atomic_load(&title_)), textArea);
@@ -166,7 +171,7 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 	if (showChart) {
 		nextToTextArea = new Wt::WContainerWidget(textArea);
 		nextToTextLayout = new Wt::WHBoxLayout(nextToTextArea);
-		textLayout->addWidget(nextToTextArea);
+		textLayout->addWidget(nextToTextArea, 1);
 	}
 	Wt::WContainerWidget* text = new Wt::WContainerWidget(showChart ? nextToTextArea : textArea);
 
@@ -181,15 +186,24 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 			dialog->setModal(false);
 			Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
 
+			Wt::WLineEdit* nameEdit = nullptr;
+			if (viewing->rank_ == ADMIN) {
+				nameEdit = new Wt::WLineEdit(dialog->contents());
+				nameEdit->setPlaceholderText(Wt::WString(*tr::get(tr::USER_NAME)));
+				nameEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->author_)));
+				layout->addWidget(nameEdit);
+			}
+
 			Wt::WLineEdit* titleEdit = new Wt::WLineEdit(dialog->contents());
 			titleEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_POST_TITLE)));
-			titleEdit->setText(Wt::WString(*std::atomic_load(&title_)));
+			titleEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->title_)));
 			layout->addWidget(titleEdit);
 			Wt::WTextArea* textArea = new Wt::WTextArea(dialog->contents());
-			textArea->setText(Wt::WString(*std::atomic_load(&text_)));
+			textArea->setText(Wt::WString(*std::atomic_load(&ptrToSelf->text_)));
 			textArea->setColumns(80);
 			//textArea->setRows(5);
 			layout->addWidget(textArea);
+
 			Wt::WContainerWidget* newButtonContainer = new Wt::WContainerWidget(dialog->contents());
 			layout->addWidget(newButtonContainer);
 			Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(newButtonContainer);
@@ -201,6 +215,25 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 			buttonLayout->addStretch(1);
 
 			editButton->clicked().connect(std::bind([=] () {
+				if (nameEdit) {
+					const std::string& newAuthorName = nameEdit->text().toUTF8();
+					//if (!user::validateUsername(newAuthorName)) return;
+					if (author) {
+						author->posts_--;
+						for (unsigned int i = 0; i < (int)ratingSize; i++) {
+							author->rating_[i] -= rating_[i];
+						}
+						std::atomic_store(&ptrToSelf->author_, std::make_shared<std::string>(newAuthorName));
+					} else std::atomic_store(&ptrToSelf->author_, std::make_shared<std::string>(newAuthorName.empty() ?
+													newAuthorName : replaceVar(*tr::get(tr::GUEST_NAME), 'X', newAuthorName)));
+					std::shared_ptr<user> newAuthor = userList::get().getUser(newAuthorName);
+					if (newAuthor) {
+						newAuthor->posts_++;
+						for (unsigned int i = 0; i < (int)ratingSize; i++) {
+							author->rating_[i] += rating_[i];
+						}
+					}
+				}
 				std::shared_ptr<std::string> newText = std::make_shared<std::string>(textArea->text().toUTF8());
 				std::atomic_store(&ptrToSelf->title_, std::make_shared<std::string>(titleEdit->text().toUTF8()));
 				std::atomic_store(&ptrToSelf->text_, newText);
@@ -214,22 +247,20 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 				dialog->reject();
 			}));
 
+			dialog->finished().connect(std::bind([=] () { delete dialog; }));
 			dialog->show();
 		}));
 	}
 	if (viewing && ((author == viewing && viewing->rank_ >= Settings::get().canDeleteOwn) || (viewing->rank_ > Settings::get().canEditOther && (!author || viewing->rank_ > author->rank_)) || viewing->rank_ == ADMIN)) {
 		Wt::WPushButton* deleteButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::DELETE_POST)), titleContainer);
 		titleLayout->addWidget(deleteButton);
-		std::shared_ptr<post> ptrToSelf = self(); // To prevent the post from being distroyed at inappropriate time
 		deleteButton->clicked().connect(std::bind([=] () {
 
-			Wt::StandardButton answer = Wt::WMessageBox::show(Wt::WString(*tr::get(tr::DELETE_POST)), Wt::WString(*tr::get(tr::DO_DELETE_POST)), Wt::Ok | Wt::Cancel);
-			if (answer == Wt::Ok) {
+			areYouSureBox(*tr::get(tr::DELETE_POST), *tr::get(tr::DO_DELETE_POST), [=] () -> void {
 				ptrToSelf->parent_->children_.erase(ptrToSelf->id_);
 				if (author) author->posts_--;
 				delete result;
-				// Do the deletion
-			}
+			});
 		}));
 	}
 
@@ -247,6 +278,7 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 
 	std::shared_ptr<post> copy = self();
 	Wt::WContainerWidget* replyArea = new Wt::WContainerWidget(textArea);
+	replyArea->setStyleClass("lightforums-replyarea");
 	if (depth == 0) {
 		hideChildren(viewer, replyArea, copy);
 	} else {
@@ -325,15 +357,19 @@ void lightforums::post::hideChildren(std::string viewer, Wt::WContainerWidget* c
 
 Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::string viewer, Wt::WContainerWidget* container, Wt::WContainerWidget* buttonContainer, std::shared_ptr<post> from) {
 	Wt::WPushButton* replyButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(title), 'X', from->children_.size())), buttonContainer);
+	std::shared_ptr<user> poster = userList::get().getUser(viewer);
 	replyButton->clicked().connect(std::bind([=] () {
 
 		Wt::WDialog* dialog = new Wt::WDialog(*tr::get(tr::WRITE_A_REPLY));
 		dialog->setModal(false);
 		Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
 
-		Wt::WLineEdit* nameEdit = new Wt::WLineEdit(dialog->contents());
-		nameEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_AUTHOR_NAME)));
-		layout->addWidget(nameEdit);
+		Wt::WLineEdit* nameEdit;
+		if (!poster) {
+			nameEdit = new Wt::WLineEdit(dialog->contents());
+			nameEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_AUTHOR_NAME)));
+			layout->addWidget(nameEdit);
+		}
 		Wt::WLineEdit* titleEdit = new Wt::WLineEdit(dialog->contents());
 		titleEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_POST_TITLE)));
 		titleEdit->setText(Wt::WString(replaceVar(*tr::get(tr::REPLY_TITLE), 'X', *std::atomic_load(&from->title_))));
@@ -355,12 +391,13 @@ Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::
 		postButton->clicked().connect(std::bind([=] () {
 			post* reply = new post();
 			reply->title_ = std::make_shared<std::string>(titleEdit->text().toUTF8());
-			std::shared_ptr<user> poster = userList::get().getUser(viewer);
 			if (poster) {
 				reply->author_ = std::make_shared<std::string>(viewer);
 				poster->posts_++;
 			} else {
-				reply->author_ = std::make_shared<std::string>(replaceVar(*tr::get(tr::GUEST_NAME), 'X', nameEdit->text().toUTF8()));
+				std::string nameGiven = nameEdit->text().toUTF8();
+				if (!user::validateUsername(nameGiven)) return;
+				reply->author_ = std::make_shared<std::string>(replaceVar(*tr::get(tr::GUEST_NAME), 'X', nameGiven));
 			}
 			reply->text_ = std::make_shared<std::string>(textArea->text().toUTF8());
 			reply->visibility_ = USER;
@@ -374,6 +411,7 @@ Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::
 			dialog->reject();
 		}));
 
+		dialog->finished().connect(std::bind([=] () { delete dialog; }));
 		dialog->show();
 	}));
 	return replyButton;

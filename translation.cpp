@@ -19,6 +19,8 @@ lightforums::tr::tr()
 	original_[SET_POST_SHOW_USER_RATING] = "Show poster's rating in post";
 	original_[SET_PROFILE_SHOW_USER_RATING] = "Show user's rating on profile";
 	original_[SET_COLOURISE_SMALL_RATING] = "Colourise inline rating";
+	original_[SET_SAVING_FREQUENCY] = "Saving frequency (in seconds)";
+	original_[SET_BACKUP_FREQUENCY] = "Backup frequency (saves per backup save)";
 	original_[SHOW_POSTS] = "Posts: X";
 	original_[SHOW_GUEST] = "Guest";
 	original_[SHOW_REPLIES] = "Show X replies";
@@ -40,6 +42,10 @@ lightforums::tr::tr()
 	original_[USER_TITLE] = "Title:";
 	original_[USER_POSTS] = "Posts:";
 	original_[USER_DESCRIPTION] = "Description";
+	original_[CHANGE_PASSWORD_LINE] = "Password:";
+	original_[CHANGE_PASSWORD] = "Change password";
+	original_[WRITE_YOUR_CURRENT_PASSWORD] = "Write your current password";
+	original_[DONT_CHANGE_PASSWORD] = "Don't change password";
 	original_[DO_LOG_IN] = "Log in";
 	original_[DO_REGISTER] = "Register";
 	original_[DO_LOG_OUT] = "Log out";
@@ -53,6 +59,7 @@ lightforums::tr::tr()
 	original_[REWRITE_PASSWORD] = "rewrite password";
 	original_[USERNAME_UNAVAILABLE] = "This username is not available";
 	original_[USERNAME_ILLEGAL_CHARACTER] = "Usernames can contain only characters a-z, A-Z, 0-9 and underscores _";
+	original_[USERNAME_CANT_BE_EMPTY] = "Usernames cannot be empty";
 	original_[REGISTER_ERROR] = "Register error";
 	original_[PASSWORDS_DONT_MATCH] = "The two copies of the password don't match";
 	original_[CANCEL_ACCOUNT_CREATION] = "Don't create account";
@@ -95,6 +102,9 @@ lightforums::tr::tr()
 	original_[NOT_RATED_YET] = "unrated";
 	original_[RATED_AS_X] = "Rating: X%";
 	original_[SPOILER_TITLE] = "Spoiler:";
+	original_[GENERIC_OK] = "Ok";
+	original_[GENERIC_CONTINUE] = "Continue";
+	original_[GENERIC_CANCEL] = "Cancel";
 }
 
 void  lightforums::tr::init(rapidxml::xml_node<char>* source) {

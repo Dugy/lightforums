@@ -3,9 +3,14 @@
 #include "mainwindow.h"
 #include <rapidxml/rapidxml.hpp>
 #include <rapidxml/rapidxml_print.hpp>
+#include <thread>
+#include <chrono>
 #include "settings.h"
 #include "post.h"
 #include "userlist.h"
+
+volatile bool exiting = false;
+volatile bool readyToExit = false;
 
 void setupStructures(const std::string& fileName) {
 	std::ifstream in(fileName);
@@ -75,10 +80,33 @@ void saveStructures(const std::string& fileName) {
 	}
 	root->append_node(cookiesSaved);
 
+	system(std::string("mv " + fileName + ".old " + fileName + ".very_old").c_str());
+	system(std::string("mv " + fileName + " " + fileName + ".old").c_str());
+	std::cerr << "Saved as " << fileName << std::endl;
+
 	std::ofstream out(fileName);
 	out << doc;
 	out.close();
 	doc.clear();
+}
+
+void saveOccasionally() {
+	unsigned int waited = 0;
+	unsigned int tillBackup = 0;
+	while (!exiting) {
+		if (waited >= lightforums::Settings::get().savingFrequency) {
+			saveStructures("saved_data.xml");
+			waited = 0;
+			if (tillBackup >= lightforums::Settings::get().backupFrequency) {
+				saveStructures("backup_data.xml");
+				tillBackup = 0;
+			} else tillBackup++;
+		} waited++;
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
+	saveStructures("saved_data.xml");
+	readyToExit = true;
+	std::cerr << "Ready to exit" << std::endl;
 }
 
 Wt::WApplication* createApplication(const Wt::WEnvironment& env)
@@ -89,9 +117,12 @@ Wt::WApplication* createApplication(const Wt::WEnvironment& env)
 int main(int argc, char** argv)
 {
 	setupStructures("saved_data.xml");
+	std::thread backupThread(saveOccasionally);
 	int result = Wt::WRun(argc, argv, &createApplication);
-	system("mv saved_data_old.xml saved_data_very_old.xml");
-	system("mv saved_data.xml saved_data_old.xml");
-	saveStructures("saved_data.xml");
+	exiting = true;
+	while (!readyToExit) {
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
+	backupThread.join();
 	return result;
 }

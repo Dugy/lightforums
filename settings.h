@@ -38,6 +38,8 @@ namespace lightforums {
 		howToDisplay postShowRating;
 		bool profileShowUserRating;
 		bool colouriseSmallRating;
+		unsigned int savingFrequency;
+		unsigned int backupFrequency;
 
 	private:
 		Settings();
@@ -61,6 +63,9 @@ namespace lightforums {
 			doOnEnum((unsigned char*)&postShowUserRating, SHOW_SMALL, "post_show_user_rating", tr::SET_POST_SHOW_USER_RATING, howToDisplaySize, tr::RATING_SHOW_ALL);
 			doOnBool(profileShowUserRating, true, "profile_show_user_rating", tr::SET_PROFILE_SHOW_USER_RATING);
 			doOnBool(colouriseSmallRating, true, "colourise_small_rating", tr::SET_COLOURISE_SMALL_RATING);
+			doOnUint(savingFrequency, 3600, "saving_frequency", tr::SET_SAVING_FREQUENCY);
+			doOnUint(backupFrequency, 24, "backup_frequency", tr::SET_BACKUP_FREQUENCY);
+
 
 		}
 

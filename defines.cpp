@@ -13,6 +13,9 @@
 #include <WStandardItem>
 #include <WPanel>
 #include <WAnimation>
+#include <WDialog>
+#include <WVBoxLayout>
+#include <WHBoxLayout>
 #include "settings.h"
 #include "translation.h"
 
@@ -68,7 +71,7 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 			};
 
 			for (const char* str = source.c_str(); *str; increment(str)) {
-				if ((str == source.c_str() || str[-1] == '\n') && *str == '=') {
+				if ((str == source.c_str() || str[-1] == '\n') && *str == '!') {
 					pushSoFar();
 					const char* strIn = str + 1;
 					for ( ; *strIn && (*strIn != '\n' || strIn[-1] == '\\'); increment(strIn)) {
@@ -168,7 +171,10 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 				for (const char* str = text.c_str(); *str; str++) {
 					if (*str == '\n') {
 						newText.append("<br/>");
-					} else if (*str == '\\' && (str[1] == '_' || str[1] == '*' || str[1] == '-' || str[1] == '~' || str[1] == '-' || str[1] == '`')) {}
+					} else if (*str == '\\' && str[1] == '\\') {
+						newText.push_back('\\');
+						str++;
+					} else if (*str == '\\' && (str[1] == '_' || str[1] == '*' || str[1] == '-' || str[1] == '~' || str[1] == '-' || str[1] == '`' || str[1] == '!' || str[1] == '{' || str[1] == '}' || str[1] == ']' || str[1] == '|')) {}
 					else newText.push_back(*str);
 				}
 				text.swap(newText);
@@ -233,36 +239,6 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 					return result;
 			}
 		}
-
-//		void construct(Wt::WContainerWidget* into) {
-//			// Some structures can be only identified by the root, so root will specifically work with them
-//			if (deeper.empty()) {
-//				new Wt::WText(Wt::WString(text), into);
-//				return;
-//			}
-//			for (unsigned int i = 0; i < deeper.size(); i++) {
-//				if (deeper[i].style == PLAIN) new Wt::WText(Wt::WString(deeper[i].print()), into); // Most common, let it be dealt with easily
-//				else if (deeper[i].style == HEADING) new Wt::WText(Wt::WString("<h1>" + deeper[i].print() + "</h1>"), into);
-//				else if (deeper[i].style == BULLET) {
-//					std::string composed = "<ul>";
-//					for ( ; i < deeper.size() && deeper[i].style == BULLET; i++) {
-//						composed += "<li>" + deeper[i].print() + "</li>";
-//					}
-//					i--;
-//					new Wt::WText(Wt::WString(composed + "</ul>"), into);
-//					continue;
-//				} else if (deeper[i].style == SPOILER) {
-//					Wt::WPanel* panel = new Wt::WPanel(into);
-//					panel->setTitle(Wt::WString(*tr::get(tr::SPOILER_TITLE)));
-//					panel->setCollapsible(true);
-//					Wt::WAnimation animation(Wt::WAnimation::SlideInFromTop, Wt::WAnimation::EaseOut, 100);
-//					panel->setAnimation(animation);
-//					panel->setCentralWidget(new Wt::WText(deeper[i].print()));
-//				} else {
-//					new Wt::WText(Wt::WString(deeper[i].print()), into);
-//				}
-//			}
-//		}
 	};
 
 	node parsed(str);
@@ -410,6 +386,62 @@ Wt::WText* lightforums::makeRatingOverview(const std::atomic_int* data, Wt::WCon
 	text += replaceVar(*tr::get(tr::RATED_AS_X), 'X', goodPercentage);
 	if (Settings::get().colouriseSmallRating) text += "</font>";
 	return new Wt::WText(Wt::WString(text), parent);
+}
+
+void lightforums::messageBox(const std::string& title, const std::string& text) {
+	Wt::WDialog* dialog = new Wt::WDialog(Wt::WString(title));
+	dialog->setModal(false);
+	Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
+
+	Wt::WText* announcement = new Wt::WText(Wt::WString(text), dialog->contents());
+	layout->addWidget(announcement);
+
+	Wt::WContainerWidget* buttonContainer = new Wt::WContainerWidget(dialog->contents());
+	layout->addWidget(buttonContainer);
+	Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(buttonContainer);
+	buttonLayout->addStretch(1);
+	Wt::WPushButton* okButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::GENERIC_OK)), buttonContainer);
+	okButton->setDefault(true);
+	buttonLayout->addWidget(okButton);
+	buttonLayout->addStretch(1);
+
+	okButton->clicked().connect(std::bind([=] () {
+		dialog->accept();
+	}));
+
+	dialog->finished().connect(std::bind([=] () { delete dialog; }));
+
+	dialog->show();
+}
+
+void lightforums::areYouSureBox(const std::string& title, const std::string& text, std::function<void ()> acceptFunc, std::function<void ()> rejectFunc){
+	Wt::WDialog* dialog = new Wt::WDialog(Wt::WString(title));
+	dialog->setModal(false);
+	Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
+
+	Wt::WText* announcement = new Wt::WText(Wt::WString(text), dialog->contents());
+	layout->addWidget(announcement);
+
+	Wt::WContainerWidget* buttonContainer = new Wt::WContainerWidget(dialog->contents());
+	layout->addWidget(buttonContainer);
+	Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(buttonContainer);
+	Wt::WPushButton* continueButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::GENERIC_CONTINUE)), buttonContainer);
+	continueButton->setDefault(true);
+	buttonLayout->addWidget(continueButton);
+	buttonLayout->addStretch(1);
+	Wt::WPushButton* cancelButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::GENERIC_CANCEL)), buttonContainer);
+	cancelButton->setDefault(true);
+	buttonLayout->addWidget(cancelButton);
+
+	continueButton->clicked().connect(std::bind([=] () { acceptFunc(); dialog->accept(); }));
+	if (rejectFunc)
+		cancelButton->clicked().connect(std::bind([=] () { rejectFunc(); dialog->reject(); }));
+	else
+		cancelButton->clicked().connect(std::bind([=] () { dialog->reject(); }));
+
+	dialog->finished().connect(std::bind([=] () { delete dialog; }));
+
+	dialog->show();
 }
 
 std::string lightforums::replaceVar(const std::string& str, char X, int x) {

@@ -28,6 +28,7 @@ namespace Wt {
 	class WComboBox;
 	class WColor;
 	class WText;
+	class WDialog;
 	namespace Chart {
 		class WPieChart;
 	}
@@ -83,6 +84,8 @@ namespace lightforums {
 	Wt::Chart::WPieChart* makeRatingChart(const std::atomic_int* data, Wt::WContainerWidget* parent);
 	Wt::WText* makeRatingOverview(const std::atomic_int* data, Wt::WContainerWidget* parent);
 	const Wt::WColor& getColour(colour col);
+	void messageBox(const std::string& title, const std::string& text);
+	void areYouSureBox(const std::string& title, const std::string& text, std::function<void ()> acceptFunc, std::function<void ()> rejectFunc = nullptr);
 
 	std::string toBase64(const std::string& from);
 	std::string fromBase64(const std::string& from);

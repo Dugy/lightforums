@@ -43,8 +43,8 @@ mainWindow::mainWindow(const Wt::WEnvironment& env) :
 		}
 	} catch (std::runtime_error e) {}
 
-//	setCssTheme("polished");
 //	useStyleSheet("css/style.css");
+	setCssTheme("default");
 //	setTheme(new Wt::WBootstrapTheme());
 
 	rebuild();
@@ -62,11 +62,14 @@ void mainWindow::rebuild() {
 	scrollArea_ = new Wt::WScrollArea(root());
 	layout->addWidget(scrollArea_, Wt::WBorderLayout::Center);
 
-	Wt::WText* by = new Wt::WText(Wt::WString("Software: lightforums (2017)"), root());
-	layout->addWidget(by, Wt::WBorderLayout::South);
+	Wt::WContainerWidget* byContainer = new Wt::WContainerWidget(root());
+	byContainer->setStyleClass("lightforums-topbar");
+	Wt::WText* by = new Wt::WText(Wt::WString("Software: lightforums (2017)"), byContainer);
+	layout->addWidget(byContainer, Wt::WBorderLayout::South);
 
 	authContainer_ = new Wt::WContainerWidget(root());
 	layout->addWidget(authContainer_, Wt::WBorderLayout::North);
+	authContainer_->setStyleClass("lightforums-bottombar");
 	makeAuthBlock();
 
 
@@ -170,14 +173,14 @@ void mainWindow::makeAuthBlock() {
 
 			loginButton->clicked().connect(std::bind([=] () {
 				std::shared_ptr<lightforums::user> found = lightforums::userList::get().getUser(nameEdit->text().toUTF8());
-				if (!found) Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::LOGIN_ERROR), *lightforums::tr::get(lightforums::tr::NO_SUCH_USER), Wt::Ok);
+				if (!found) lightforums::messageBox(*lightforums::tr::get(lightforums::tr::LOGIN_ERROR), *lightforums::tr::get(lightforums::tr::NO_SUCH_USER));
 				else {
-					std::string salt = lightforums::safeRandomString();
+//					std::string salt = lightforums::safeRandomString();
 					static Wt::Auth::BCryptHashFunction cryptHasher(5);
 //					found->salt_ = std::make_shared<std::string>(salt); // Enable this to make login attempt change the password to the written one
 //					found->password_ = std::make_shared<std::string>(cryptHasher.compute(passwordEdit->text().toUTF8(), salt));
 					if (!cryptHasher.verify(passwordEdit->text().toUTF8(), *found->salt_, *found->password_))
-						Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::LOGIN_ERROR), *lightforums::tr::get(lightforums::tr::WRONG_PASSWORD), Wt::Ok);
+						lightforums::messageBox(*lightforums::tr::get(lightforums::tr::LOGIN_ERROR), *lightforums::tr::get(lightforums::tr::WRONG_PASSWORD));
 					else {
 						currentUser_ = *found->name_;
 						std::string cookie = lightforums::safeRandomString();
@@ -195,6 +198,7 @@ void mainWindow::makeAuthBlock() {
 				dialog->reject();
 			}));
 
+			dialog->finished().connect(std::bind([=] () { delete dialog; }));
 			dialog->show();
 
 		}));
@@ -250,8 +254,8 @@ void mainWindow::makeAuthBlock() {
 			registerButton->clicked().connect(std::bind([=] () {
 				std::string username = nameEdit->text().toUTF8();
 				std::shared_ptr<lightforums::user> found = lightforums::userList::get().getUser(username);
-				if (found) Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::USERNAME_UNAVAILABLE), Wt::Ok);
-				else if (passwordEdit[0]->text() != passwordEdit[1]->text()) Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::PASSWORDS_DONT_MATCH), Wt::Ok);
+				if (found) lightforums::messageBox(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::USERNAME_UNAVAILABLE));
+				else if (passwordEdit[0]->text() != passwordEdit[1]->text()) lightforums::messageBox(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::PASSWORDS_DONT_MATCH));
 				else {
 					if (lightforums::user::validateUsername(username)) {
 						std::shared_ptr<lightforums::user> made = std::make_shared<lightforums::user>();
@@ -269,7 +273,7 @@ void mainWindow::makeAuthBlock() {
 							dialog->accept();
 							rebuild();
 						} else {
-							Wt::WMessageBox::show(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::USERNAME_UNAVAILABLE), Wt::Ok);
+							lightforums::messageBox(*lightforums::tr::get(lightforums::tr::REGISTER_ERROR), *lightforums::tr::get(lightforums::tr::USERNAME_UNAVAILABLE));
 						}
 					}
 				}
@@ -282,6 +286,7 @@ void mainWindow::makeAuthBlock() {
 				dialog->reject();
 			}));
 
+			dialog->finished().connect(std::bind([=] () { delete dialog; }));
 			dialog->show();
 		}));
 	}
