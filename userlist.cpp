@@ -7,13 +7,14 @@ lightforums::userList::userList()
 }
 
 void lightforums::userList::setupUserList(rapidxml::xml_node<>* from) {
-	for (rapidxml::xml_node<>* node = from->first_node("user"); node; node = node->next_sibling("user")) {
+	if (from) for (rapidxml::xml_node<>* node = from->first_node("user"); node; node = node->next_sibling("user")) {
 		std::shared_ptr<user> made = std::make_shared<user>(node);
 		users_.insert(*std::atomic_load(&made->name_), made);
 	}
+	std::cerr << "Users size " << users_.size() << std::endl;
 	if (users_.size() == 0) {
 		std::shared_ptr<user> dummy = std::make_shared<user>();
-		dummy->name_ = std::make_shared<std::string>("Administrator President");
+		dummy->name_ = std::make_shared<std::string>("Administrator_President");
 		dummy->password_ = std::make_shared<std::string>("$2y$05$KCrvQ0v0KA7iMSH2MUrFReCr7aVFsennHEmeNzztKDa0MVfx5FOSW");
 		dummy->salt_ = std::make_shared<std::string>("0KqKlv0/d9Bx9kGNu0PgL46B588=");
 		dummy->setTitle("Dictator");

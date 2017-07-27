@@ -43,8 +43,8 @@ void setupStructures(const std::string& fileName) {
 				root::get().cookies_.insert(token->value(), user->value());
 			}
 			return;
-		}
-	}
+		} else lightforums::userList::get().setupUserList(nullptr);
+	} lightforums::userList::get().setupUserList(nullptr);
 	lightforums::Settings::get().setup();
 }
 

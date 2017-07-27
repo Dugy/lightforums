@@ -24,9 +24,9 @@ std::shared_ptr<lightforums::post> root::getRootPost() {
 	// Create a dummy one
 	lightforums::post* made = new lightforums::post();
 	made->title_ = std::make_shared<std::string>("Welcome to the forums");
-	made->text_ = std::make_shared<std::string>("Create threads or subforums within this. To manage something, log in as 'Administrator President' with password 'freecandy' (and change your password as soon as possible).");
+	made->text_ = std::make_shared<std::string>("Create threads or subforums within this. To manage something, log in as 'Administrator_President' with password 'freecandy' (and change your password as soon as possible).");
 	// This leads to password $2y$05$WiDKPizNSRb0TkrTahbmLObR0vo1STjeI4xqD2rCRqbc57.LR.SJ2 if salt is bALFMOQ7vVkUr7h5MpzI0AQU9Tc=
-	made->author_ = std::make_shared<std::string>("Administrator President");
+	made->author_ = std::make_shared<std::string>("Administrator_President");
 	made->visibility_ = lightforums::USER;
 	made->depth_ = 1;
 	return made->self();
