@@ -1,9 +1,9 @@
 #include "translation.h"
-#include <WContainerWidget>
-#include <WVBoxLayout>
-#include <WInPlaceEdit>
-#include <WPushButton>
-#include <rapidxml/rapidxml.hpp>
+#include <Wt/WContainerWidget>
+#include <Wt/WVBoxLayout>
+#include <Wt/WInPlaceEdit>
+#include <Wt/WPushButton>
+#include "rapidxml.hpp"
 
 #pragma GCC diagnostic ignored "-Wwrite-strings"
 

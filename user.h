@@ -6,7 +6,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <memory>
-#include <rapidxml/rapidxml.hpp>
+#include "rapidxml.hpp"
 #include "defines.h"
 #include "atomic_unordered_map.h"
 #include "post.h"

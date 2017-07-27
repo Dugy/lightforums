@@ -1,21 +1,21 @@
 #include "defines.h"
 
-#include <WContainerWidget>
-#include <WText>
-#include <WInPlaceEdit>
-#include <WPushButton>
-#include <WComboBox>
-#include <WColor>
-#include <WPen>
+#include <Wt/WContainerWidget>
+#include <Wt/WText>
+#include <Wt/WInPlaceEdit>
+#include <Wt/WPushButton>
+#include <Wt/WComboBox>
+#include <Wt/WColor>
+#include <Wt/WPen>
 #include <Wt/Chart/WPieChart>
 #include <Wt/Chart/WChartPalette>
-#include <WStandardItemModel>
-#include <WStandardItem>
-#include <WPanel>
-#include <WAnimation>
-#include <WDialog>
-#include <WVBoxLayout>
-#include <WHBoxLayout>
+#include <Wt/WStandardItemModel>
+#include <Wt/WStandardItem>
+#include <Wt/WPanel>
+#include <Wt/WAnimation>
+#include <Wt/WDialog>
+#include <Wt/WVBoxLayout>
+#include <Wt/WHBoxLayout>
 #include "settings.h"
 #include "translation.h"
 

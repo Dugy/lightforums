@@ -1,16 +1,16 @@
 #include "settings.h"
 
-#include <rapidxml/rapidxml.hpp>
+#include "rapidxml.hpp"
 #include <cstring>
 #include <iostream>
-#include <WCheckBox>
-#include <WContainerWidget>
-#include <WText>
-#include <WSelectionBox>
-#include <WInPlaceEdit>
-#include <WGridLayout>
-#include <WLink>
-#include <WAnchor>
+#include <Wt/WCheckBox>
+#include <Wt/WContainerWidget>
+#include <Wt/WText>
+#include <Wt/WSelectionBox>
+#include <Wt/WInPlaceEdit>
+#include <Wt/WGridLayout>
+#include <Wt/WLink>
+#include <Wt/WAnchor>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 

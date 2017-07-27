@@ -1,6 +1,6 @@
 #include "userlist.h"
 #include <iostream>
-#include <rapidxml/rapidxml.hpp>
+#include "rapidxml.hpp"
 
 lightforums::userList::userList()
 {

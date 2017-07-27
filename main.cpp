@@ -1,8 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include "mainwindow.h"
-#include <rapidxml/rapidxml.hpp>
-#include <rapidxml/rapidxml_print.hpp>
+#include "rapidxml.hpp"
+#include "rapidxml_print.hpp"
 #include <thread>
 #include <chrono>
 #include "settings.h"
