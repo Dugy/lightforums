@@ -200,20 +200,16 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 			if (deeper.empty()) {
 				std::string prefix;
 				std::string suffix;
-				if (flags & CODE) {
-					new Wt::WText(Wt::WString("<tt>" + text + "</tt>"), into);
-					std::cerr << "Code is " << text << std::endl;
-				} else {
-					if (flags & ITALIC) { prefix += "<em>"; suffix = "</em>" + suffix; }
-					if (flags & BOLD) { prefix += "<strong>"; suffix = "</strong>"  + suffix; }
-					if (flags & STRIKETHROUGH) { prefix += "<strike>"; suffix = "</strike>" + suffix; }
-					if (flags & SUPERSCRIPT) { prefix += "<sup>"; suffix = "</sup>" + suffix; }
-					if (flags & SUBSCRIPT) { prefix += "<sub>"; suffix = "</sub>" + suffix; }
-					if (flags & HEADING) { prefix += "<h1>"; suffix = "</h1>" + suffix; }
-					if (flags & LINK) {
-						new Wt::WAnchor(Wt::WLink(path), Wt::WString(prefix + text + suffix), into);
-					} else new Wt::WText(Wt::WString(prefix + text + suffix), into);
-				}
+				if (flags & CODE) { prefix += "<tt>"; suffix = "</tt>" + suffix; }
+				if (flags & ITALIC) { prefix += "<em>"; suffix = "</em>" + suffix; }
+				if (flags & BOLD) { prefix += "<strong>"; suffix = "</strong>"  + suffix; }
+				if (flags & STRIKETHROUGH) { prefix += "<strike>"; suffix = "</strike>" + suffix; }
+				if (flags & SUPERSCRIPT) { prefix += "<sup>"; suffix = "</sup>" + suffix; }
+				if (flags & SUBSCRIPT) { prefix += "<sub>"; suffix = "</sub>" + suffix; }
+				if (flags & HEADING) { prefix += "<h1>"; suffix = "</h1>" + suffix; }
+				if (flags & LINK) {
+					new Wt::WAnchor(Wt::WLink(path), Wt::WString(prefix + text + suffix), into);
+				} else new Wt::WText(Wt::WString(prefix + text + suffix), into);
 			} else {
 				for (unsigned int i = 0; i < deeper.size(); i++) {
 					if (deeper[i].style == PLAIN) deeper[i].construct(into, flags); // Most common, let it be dealt with easily
