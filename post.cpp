@@ -302,6 +302,7 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 	std::shared_ptr<post> copy = self();
 	Wt::WContainerWidget* replyArea = new Wt::WContainerWidget(textArea);
 	replyArea->setStyleClass("lightforums-replyarea");
+	std::cerr << "depth " << depth << std::endl;
 	if (depth == 0) {
 		hideChildren(viewer, replyArea, copy);
 	} else {
@@ -338,15 +339,19 @@ std::string lightforums::post::getLink() {
 void lightforums::post::showChildren(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from, unsigned int depth) {
 	container->clear();
 	Wt::WVBoxLayout* layoutV = new Wt::WVBoxLayout(container);
-	if (from->children_.size() == 0) {
-		addReplyButton(tr::WRITE_FIRST_REPLY, viewer, container, container, from);
-		return;
-	}
 	Wt::WContainerWidget* buttonsContainer = new Wt::WContainerWidget(container);
 	layoutV->addWidget(buttonsContainer);
 	Wt::WHBoxLayout* layoutH = new Wt::WHBoxLayout(buttonsContainer);
 	Wt::WComboBox* ratingCombo = makeRatingCombo(viewer, buttonsContainer, from);
 	if (ratingCombo) layoutH->addWidget(ratingCombo);
+
+	if (from->children_.size() == 0) {
+		std::cerr << "No children shown\n";
+		Wt::WPushButton* replyButton = addReplyButton(tr::WRITE_FIRST_REPLY, viewer, container, container, from);
+		layoutH->addWidget(replyButton);
+		layoutH->addStretch(1);
+		return;
+	}
 
 	Wt::WPushButton* hideRepliesButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(tr::HIDE_REPLIES), 'X', from->children_.size())), buttonsContainer);
 	layoutH->addWidget(hideRepliesButton);
@@ -387,18 +392,21 @@ void lightforums::post::showChildren(std::string viewer, Wt::WContainerWidget* c
 void lightforums::post::hideChildren(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from) {
 	container->clear();
 	makeRatingCombo(viewer, container, from);
+	std::cerr << "Hide children called\n";
 	if (from->children_.size() > 0) {
 		Wt::WPushButton* showRepliesButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(tr::SHOW_REPLIES), 'X', from->children_.size())), container);
 		showRepliesButton->clicked().connect(std::bind([=] () {
 			showChildren(viewer, container, from, 1);
 		}));
 	} else {
+		std::cerr << "No children, adding a reply button\n";
 		addReplyButton(tr::WRITE_FIRST_REPLY, viewer, container, container, from);
 	}
 }
 
 Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::string viewer, Wt::WContainerWidget* container, Wt::WContainerWidget* buttonContainer, std::shared_ptr<post> from) {
 	Wt::WPushButton* replyButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(title), 'X', from->children_.size())), buttonContainer);
+	std::cerr << "Adding reply button\n";
 	std::shared_ptr<user> poster = userList::get().getUser(viewer);
 	replyButton->clicked().connect(std::bind([=] () {
 
