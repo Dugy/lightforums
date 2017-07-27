@@ -126,6 +126,9 @@ namespace lightforums {
 		std::atomic<rank> visibility_;
 		std::atomic_uint depth_;
 		std::atomic_int rating_[ratingSize];
+		sortPosts sortBy_;
+		std::atomic<time_t> postedAt_;
+		std::atomic<time_t> lastActivity_;
 
 		atomic_unordered_map<unsigned int, std::shared_ptr<post>> children_;
 

@@ -71,6 +71,13 @@ namespace lightforums {
 		colourSize
 	};
 
+	enum sortPosts : unsigned char {
+		SORT_SOMEHOW,
+		SORT_BY_POST_TIME,
+		SORT_BY_ACTIVITY,
+		sortPostsSize
+	};
+
 	void formatString(const std::string& str, Wt::WContainerWidget* into);
 	std::string replaceVar(const std::string& str, char X, int x);
 	inline std::string replaceVar(std::shared_ptr<const std::string> str, char X, int x) { return replaceVar(*str, X, x); }

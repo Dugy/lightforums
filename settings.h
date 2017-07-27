@@ -40,6 +40,7 @@ namespace lightforums {
 		bool colouriseSmallRating;
 		unsigned int savingFrequency;
 		unsigned int backupFrequency;
+		sortPosts sortBy;
 
 	private:
 		Settings();
@@ -65,7 +66,7 @@ namespace lightforums {
 			doOnBool(colouriseSmallRating, true, "colourise_small_rating", tr::SET_COLOURISE_SMALL_RATING);
 			doOnUint(savingFrequency, 3600, "saving_frequency", tr::SET_SAVING_FREQUENCY);
 			doOnUint(backupFrequency, 24, "backup_frequency", tr::SET_BACKUP_FREQUENCY);
-
+			doOnEnum((unsigned char*)&sortBy, SORT_BY_ACTIVITY, "sort_posts_by", tr::SET_REPLIES_SORT, sortPostsSize, tr::REPLIES_SORT_SOMEHOW);
 
 		}
 

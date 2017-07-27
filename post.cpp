@@ -68,12 +68,24 @@ lightforums::post::post(std::shared_ptr<post> parent, rapidxml::xml_node<>* node
 	title_ = std::make_shared<std::string>(getAttribute("title"));
 	author_ = std::make_shared<std::string>(getAttribute("author"));
 	visibility_ = (rank)atoi(getAttribute("visibility"));
+	postedAt_ = (time_t)atoi(getAttribute("posted_at"));
+	lastActivity_.store(postedAt_);
+	sortBy_ = (sortPosts)atoi(getAttribute("sort_by"));
 	rapidxml::xml_node<>* textNode = node->first_node("text");
 	if (textNode) text_ = std::make_shared<std::string>(textNode->value());
 	else text_ = std::make_shared<std::string>("");
 	id_ = atoi(getAttribute("id"));
-	if (parent_.get() != this) parent->children_.insert(std::make_pair(id_, std::shared_ptr<post>(this)));
 	depth_ = atoi(getAttribute("depth"));
+	if (parent_.get() != this) parent->children_.insert(std::make_pair(id_, std::shared_ptr<post>(this)));
+
+	// Update post time of all posts this one replied to
+	std::shared_ptr<post> ancestor = parent_;
+	do {
+		ancestor->lastActivity_ .store(postedAt_);
+		ancestor = ancestor->parent_;
+	} while (ancestor->parent_ != ancestor);
+
+	// Deal with descendants
 	for (rapidxml::xml_node<>* child = node->first_node("post"); child; child = child->next_sibling()) {
 		new lightforums::post(self(), child);
 	}
@@ -128,6 +140,8 @@ rapidxml::xml_node<>* lightforums::post::getNode(rapidxml::xml_document<>* doc, 
 	made->append_attribute(saveNumber("id", id_));
 	made->append_attribute(saveNumber("visibility", visibility_.load()));
 	made->append_attribute(saveNumber("depth", depth_.load()));
+	made->append_attribute(saveNumber("posted_at", postedAt_.load()));
+	made->append_attribute(saveNumber("sort_by", sortBy_));
 	doc->allocate_node(rapidxml::node_element, "text", text_->c_str());
 	std::shared_ptr<std::string> text(text_); // We don't want it to change while being saved
 	made->append_node(doc->allocate_node(rapidxml::node_element, "text", text->c_str()));
@@ -204,6 +218,12 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 			//textArea->setRows(5);
 			layout->addWidget(textArea);
 
+			Wt::WComboBox* sortCombo = nullptr;
+			if (viewing->rank_ == ADMIN) {
+				sortCombo = makeEnumEditor((unsigned char*)&ptrToSelf->sortBy_, sortPostsSize, tr::REPLIES_SORT_SOMEHOW, dialog->contents());
+				layout->addWidget(sortCombo);
+			}
+
 			Wt::WContainerWidget* newButtonContainer = new Wt::WContainerWidget(dialog->contents());
 			layout->addWidget(newButtonContainer);
 			Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(newButtonContainer);
@@ -233,6 +253,9 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 							author->rating_[i] += rating_[i];
 						}
 					}
+				}
+				if (sortCombo) {
+					ptrToSelf->sortBy_ = (sortPosts)sortCombo->currentIndex();
 				}
 				std::shared_ptr<std::string> newText = std::make_shared<std::string>(textArea->text().toUTF8());
 				std::atomic_store(&ptrToSelf->title_, std::make_shared<std::string>(titleEdit->text().toUTF8()));
@@ -334,11 +357,30 @@ void lightforums::post::showChildren(std::string viewer, Wt::WContainerWidget* c
 	hideRepliesButton->clicked().connect(std::bind([=] () {
 		hideChildren(viewer, container, from);
 	}));
-	for (auto it = from->children_.begin(); it != from->children_.end(); it++) {
-		Wt::WContainerWidget* replyArea = it->second->build(viewer, depth - 1);
-		if (!replyArea) continue;
+	auto addChild = [&] (std::shared_ptr<post> child) {
+		Wt::WContainerWidget* replyArea = child->build(viewer, depth - 1);
+		if (!replyArea) return;
 		container->addWidget(replyArea);
 		layoutV->addWidget(replyArea);
+	};
+
+	if (from->sortBy_ == SORT_BY_ACTIVITY || from->sortBy_ == SORT_BY_POST_TIME) {
+		std::vector<std::shared_ptr<post>> posts;
+		for (auto it = from->children_.begin(); it != from->children_.end(); it++) posts.push_back(it->second);
+		if (from->sortBy_ == SORT_BY_ACTIVITY) {
+			std::sort(posts.begin(), posts.end(), [] (const std::shared_ptr<post>& a, const std::shared_ptr<post>& b) -> bool
+			{ return a->lastActivity_ > b->lastActivity_; });
+		} else {
+			std::sort(posts.begin(), posts.end(), [] (const std::shared_ptr<post>& a, const std::shared_ptr<post>& b) -> bool
+			{ return a->postedAt_ > b->postedAt_; });
+		}
+		for (unsigned int i = 0; i < posts.size(); i++) {
+			addChild(posts[i]);
+		}
+	} else if (from->sortBy_ == SORT_SOMEHOW) {
+		for (auto it = from->children_.begin(); it != from->children_.end(); it++) {
+			addChild(it->second);
+		}
 	}
 }
 
@@ -402,6 +444,14 @@ Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::
 			reply->text_ = std::make_shared<std::string>(textArea->text().toUTF8());
 			reply->visibility_ = USER;
 			reply->depth_ = Settings::get().viewDepth;
+			reply->sortBy_ = Settings::get().sortBy;
+			reply->postedAt_ = time(nullptr);
+			reply->lastActivity_.store(reply->postedAt_);
+			std::shared_ptr<post> ancestor = from;
+			do {
+				ancestor->lastActivity_.store(reply->postedAt_);
+				ancestor = ancestor->parent_;
+			} while (ancestor->parent_ != ancestor);
 			reply->setParent(from);
 			showChildren(viewer, container, from, 1);
 			dialog->accept();

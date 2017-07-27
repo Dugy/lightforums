@@ -21,6 +21,7 @@ lightforums::tr::tr()
 	original_[SET_COLOURISE_SMALL_RATING] = "Colourise inline rating";
 	original_[SET_SAVING_FREQUENCY] = "Saving frequency (in seconds)";
 	original_[SET_BACKUP_FREQUENCY] = "Backup frequency (saves per backup save)";
+	original_[SET_REPLIES_SORT] = "Sort replies:";
 	original_[SHOW_POSTS] = "Posts: X";
 	original_[SHOW_GUEST] = "Guest";
 	original_[SHOW_REPLIES] = "Show X replies";
@@ -105,6 +106,9 @@ lightforums::tr::tr()
 	original_[GENERIC_OK] = "Ok";
 	original_[GENERIC_CONTINUE] = "Continue";
 	original_[GENERIC_CANCEL] = "Cancel";
+	original_[REPLIES_SORT_SOMEHOW] = "Don't sort replies";
+	original_[REPLIES_SORT_BY_POST_TIME] = "Sort replies by age";
+	original_[REPLIES_SORT_BY_ACTIVITY] = "Sort replies by last activity";
 }
 
 void  lightforums::tr::init(rapidxml::xml_node<char>* source) {
