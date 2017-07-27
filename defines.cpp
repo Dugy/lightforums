@@ -58,19 +58,19 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 			auto increment = [&] (const char*& str) { // special decrement/increment to deal with code
 				str++;
 				if (*str == '`' && (str == source.c_str() || str[-1] != '//')) {
-					do str++; while (*str != '`' || (str != source.c_str() && str[-1] != '//'));
+					do str++; while (*str && (*str != '`' || (str[-1] != '//')));
 					str++;
 				}
 			};
 			auto decrement = [&] (const char*& str) {
 				if (str > source.c_str()) str--;
 				if (*str == '`' && str[-1] != '\\') {
-					do str--; while ((*str != '`' || (str != source.c_str() && str[-1] != '//')) && str > source.c_str());
+					do str--; while ((*str != '`' || (str != source.c_str() && str[-1] != '//')) && str >= source.c_str());
 					str--;
 				}
 			};
 
-			for (const char* str = source.c_str(); *str; increment(str)) {
+			for (const char* str = source.c_str(); *str; str++) {
 				if ((str == source.c_str() || str[-1] == '\n') && *str == '!') {
 					pushSoFar();
 					const char* strIn = str + 1;
@@ -148,9 +148,11 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 										} else soFar.push_back(*str);
 									}
 								}
-							} else soFar.push_back(*str);
-						} else soFar.push_back(*str);
-					} else if (*str == '`' && (str == source.c_str() || str[-1] != '\\')) {
+								continue;
+							}
+						}
+					}
+					if (*str == '`' && (str == source.c_str() || str[-1] != '\\')) {
 						str++;
 						std::string added;
 						for ( ; *str != '`'; str++) added.push_back(*str);
@@ -174,6 +176,19 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 					} else if (*str == '\\' && str[1] == '\\') {
 						newText.push_back('\\');
 						str++;
+					} else if (*str == ' ' && str[1] == ' ') {
+						newText.append("&nbsp;");
+						str++;
+					} else if (*str == '<') {
+						newText.append("&lt;");
+					} else if (*str == '>') {
+						newText.append("&gt;");
+					} else if (*str == '&') {
+						newText.append("&#38;");
+					} else if (*str == '"') {
+						newText.append("&#34;");
+					} else if (*str == '\'') {
+						newText.append("&#39;");
 					} else if (*str == '\\' && (str[1] == '_' || str[1] == '*' || str[1] == '-' || str[1] == '~' || str[1] == '-' || str[1] == '`' || str[1] == '!' || str[1] == '{' || str[1] == '}' || str[1] == ']' || str[1] == '|')) {}
 					else newText.push_back(*str);
 				}
@@ -185,16 +200,20 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 			if (deeper.empty()) {
 				std::string prefix;
 				std::string suffix;
-				if (flags & CODE) { prefix += "<tt>"; suffix = "</tt>" + suffix; }
-				if (flags & ITALIC) { prefix += "<em>"; suffix = "</em>" + suffix; }
-				if (flags & BOLD) { prefix += "<strong>"; suffix = "</strong>"  + suffix; }
-				if (flags & STRIKETHROUGH) { prefix += "<strike>"; suffix = "</strike>" + suffix; }
-				if (flags & SUPERSCRIPT) { prefix += "<sup>"; suffix = "</sup>" + suffix; }
-				if (flags & SUBSCRIPT) { prefix += "<sub>"; suffix = "</sub>" + suffix; }
-				if (flags & HEADING) { prefix += "<h1>"; suffix = "</h1>" + suffix; }
-				if (flags & LINK) {
-					new Wt::WAnchor(Wt::WLink(path), Wt::WString(prefix + text + suffix), into);
-				} else new Wt::WText(Wt::WString(prefix + text + suffix), into);
+				if (flags & CODE) {
+					new Wt::WText(Wt::WString("<tt>" + text + "</tt>"), into);
+					std::cerr << "Code is " << text << std::endl;
+				} else {
+					if (flags & ITALIC) { prefix += "<em>"; suffix = "</em>" + suffix; }
+					if (flags & BOLD) { prefix += "<strong>"; suffix = "</strong>"  + suffix; }
+					if (flags & STRIKETHROUGH) { prefix += "<strike>"; suffix = "</strike>" + suffix; }
+					if (flags & SUPERSCRIPT) { prefix += "<sup>"; suffix = "</sup>" + suffix; }
+					if (flags & SUBSCRIPT) { prefix += "<sub>"; suffix = "</sub>" + suffix; }
+					if (flags & HEADING) { prefix += "<h1>"; suffix = "</h1>" + suffix; }
+					if (flags & LINK) {
+						new Wt::WAnchor(Wt::WLink(path), Wt::WString(prefix + text + suffix), into);
+					} else new Wt::WText(Wt::WString(prefix + text + suffix), into);
+				}
 			} else {
 				for (unsigned int i = 0; i < deeper.size(); i++) {
 					if (deeper[i].style == PLAIN) deeper[i].construct(into, flags); // Most common, let it be dealt with easily
@@ -212,31 +231,6 @@ void lightforums::formatString(const std::string& str, Wt::WContainerWidget* int
 						deeper[i].construct(into, flags ^ deeper[i].style);
 					}
 				}
-			}
-
-		}
-
-		std::string print() {
-			std::string result;
-			if (deeper.empty()) result = text;
-			else for (unsigned int i = 0; i < deeper.size(); i++) {
-				result += deeper[i].print();
-			}
-			switch (style) {
-				case CODE:
-					return "<tt>" + result + "</tt>";
-				case ITALIC:
-					return "<em>" + result + "</em>";
-				case BOLD:
-					return "<strong>" + result + "</strong>";
-				case STRIKETHROUGH:
-					return "<strike>" + result + "</strike>";
-				case SUPERSCRIPT:
-					return "<sup>" + result + "</sup>";
-				case SUBSCRIPT:
-					return "<sub>" + result + "</sub>";
-				default:
-					return result;
 			}
 		}
 	};
