@@ -36,6 +36,8 @@ namespace Wt {
 
 namespace lightforums {
 
+	class user;
+
 	enum rank : unsigned char {
 		USER, // Standard rights
 		VALUED_USER, // Slightly elevated rights

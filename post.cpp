@@ -151,8 +151,114 @@ rapidxml::xml_node<>* lightforums::post::getNode(rapidxml::xml_document<>* doc, 
 	return made;
 }
 
+Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, std::shared_ptr<user> viewing, std::shared_ptr<user> author, bool edit, std::function<void ()> react) {
+	Wt::WDialog* dialog = new Wt::WDialog(Wt::WString(*tr::get(edit ? tr::EDIT_POST : tr::WRITE_A_REPLY)));
+	dialog->setModal(false);
+	Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
+
+	Wt::WLineEdit* nameEdit = nullptr;
+	if (viewing->rank_ == ADMIN || ((!viewing) && !edit)) {
+		nameEdit = new Wt::WLineEdit(dialog->contents());
+		nameEdit->setPlaceholderText(Wt::WString(*tr::get(tr::USER_NAME)));
+		nameEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->author_)));
+		layout->addWidget(nameEdit);
+	}
+
+	Wt::WLineEdit* titleEdit = new Wt::WLineEdit(dialog->contents());
+	titleEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_POST_TITLE)));
+	if (edit) titleEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->title_)));
+	else titleEdit->setText(Wt::WString(replaceVar(*tr::get(tr::REPLY_TITLE), 'X', *std::atomic_load(&ptrToSelf->title_))));
+	layout->addWidget(titleEdit);
+	Wt::WTextArea* textArea = new Wt::WTextArea(dialog->contents());
+	if (edit) textArea->setText(Wt::WString(*std::atomic_load(&ptrToSelf->text_)));
+	textArea->setColumns(80);
+	textArea->setRows(5);
+	layout->addWidget(textArea);
+
+	Wt::WComboBox* sortCombo = nullptr;
+	if (viewing->rank_ == ADMIN) {
+		sortCombo = makeEnumEditor((unsigned char*)&ptrToSelf->sortBy_, sortPostsSize, tr::REPLIES_SORT_SOMEHOW, dialog->contents());
+		layout->addWidget(sortCombo);
+	}
+
+	Wt::WContainerWidget* newButtonContainer = new Wt::WContainerWidget(dialog->contents());
+	layout->addWidget(newButtonContainer);
+	Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(newButtonContainer);
+	Wt::WPushButton* okButton = new Wt::WPushButton(Wt::WString(*tr::get(edit? tr::EDIT_POST : tr::WRITE_A_REPLY)), newButtonContainer);
+	okButton->setDefault(true);
+	Wt::WPushButton* cancelButton = new Wt::WPushButton(Wt::WString(*tr::get(edit ? tr::CANCEL_EDITING : tr::CANCEL_REPLYING)), newButtonContainer);
+	buttonLayout->addWidget(okButton);
+	buttonLayout->addWidget(cancelButton);
+	buttonLayout->addStretch(1);
+
+	okButton->clicked().connect(std::bind([=] () {
+		if (edit) {
+			if (nameEdit) {
+				const std::string& newAuthorName = nameEdit->text().toUTF8();
+				//if (!user::validateUsername(newAuthorName)) return;
+				if (author) {
+					author->posts_--;
+					for (unsigned int i = 0; i < (int)ratingSize; i++) {
+						author->rating_[i] -= ptrToSelf->rating_[i];
+					}
+					std::atomic_store(&ptrToSelf->author_, std::make_shared<std::string>(newAuthorName));
+				} else std::atomic_store(&ptrToSelf->author_, std::make_shared<std::string>(newAuthorName.empty() ?
+																								newAuthorName : replaceVar(*tr::get(tr::GUEST_NAME), 'X', newAuthorName)));
+				std::shared_ptr<user> newAuthor = userList::get().getUser(newAuthorName);
+				if (newAuthor) {
+					newAuthor->posts_++;
+					for (unsigned int i = 0; i < (int)ratingSize; i++) {
+						author->rating_[i] += ptrToSelf->rating_[i];
+					}
+				}
+			}
+			if (sortCombo) {
+				ptrToSelf->sortBy_ = (sortPosts)sortCombo->currentIndex();
+			}
+			std::shared_ptr<std::string> newText = std::make_shared<std::string>(textArea->text().toUTF8());
+			std::atomic_store(&ptrToSelf->title_, std::make_shared<std::string>(titleEdit->text().toUTF8()));
+			std::atomic_store(&ptrToSelf->text_, newText);
+		} else {
+			post* reply = new post();
+			reply->title_ = std::make_shared<std::string>(titleEdit->text().toUTF8());
+			if (viewing) {
+				reply->author_ = std::make_shared<std::string>(*viewing->name_);
+				viewing->posts_++;
+			} else {
+				std::string nameGiven = nameEdit->text().toUTF8();
+				if (!user::validateUsername(nameGiven)) return;
+				reply->author_ = std::make_shared<std::string>(replaceVar(*tr::get(tr::GUEST_NAME), 'X', nameGiven));
+			}
+			reply->text_ = std::make_shared<std::string>(textArea->text().toUTF8());
+			reply->visibility_ = USER;
+			reply->depth_ = Settings::get().viewDepth;
+			reply->sortBy_ = Settings::get().sortBy;
+			reply->postedAt_ = time(nullptr);
+			reply->lastActivity_.store(reply->postedAt_);
+			std::shared_ptr<post> ancestor = ptrToSelf;
+			do {
+				ancestor->lastActivity_.store(reply->postedAt_);
+				ancestor = ancestor->parent_;
+			} while (ancestor->parent_ != ancestor);
+			reply->setParent(ptrToSelf);
+		}
+		react();
+		dialog->accept();
+	}));
+
+	cancelButton->clicked().connect(std::bind([=] () {
+		dialog->reject();
+	}));
+
+	dialog->finished().connect(std::bind([=] () { delete dialog; }));
+
+
+	return dialog;
+
+}
+
 Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int depth, bool showParentLink) {
-	std::shared_ptr<const user> viewing = userList::get().getUser(viewer);
+	std::shared_ptr<user> viewing = userList::get().getUser(viewer);
 	if ((!viewing && visibility_ > USER) || (viewing && viewing->rank_ < visibility_)) return nullptr;
 
 	std::shared_ptr<std::string> authorName = std::atomic_load(&author_);
@@ -195,82 +301,11 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 		Wt::WPushButton* editButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::EDIT_POST)), titleContainer);
 		titleLayout->addWidget(editButton);
 		editButton->clicked().connect(std::bind([=] () {
-
-			Wt::WDialog* dialog = new Wt::WDialog(Wt::WString(*tr::get(tr::EDIT_POST)));
-			dialog->setModal(false);
-			Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
-
-			Wt::WLineEdit* nameEdit = nullptr;
-			if (viewing->rank_ == ADMIN) {
-				nameEdit = new Wt::WLineEdit(dialog->contents());
-				nameEdit->setPlaceholderText(Wt::WString(*tr::get(tr::USER_NAME)));
-				nameEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->author_)));
-				layout->addWidget(nameEdit);
-			}
-
-			Wt::WLineEdit* titleEdit = new Wt::WLineEdit(dialog->contents());
-			titleEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_POST_TITLE)));
-			titleEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->title_)));
-			layout->addWidget(titleEdit);
-			Wt::WTextArea* textArea = new Wt::WTextArea(dialog->contents());
-			textArea->setText(Wt::WString(*std::atomic_load(&ptrToSelf->text_)));
-			textArea->setColumns(80);
-			textArea->setRows(5);
-			layout->addWidget(textArea);
-
-			Wt::WComboBox* sortCombo = nullptr;
-			if (viewing->rank_ == ADMIN) {
-				sortCombo = makeEnumEditor((unsigned char*)&ptrToSelf->sortBy_, sortPostsSize, tr::REPLIES_SORT_SOMEHOW, dialog->contents());
-				layout->addWidget(sortCombo);
-			}
-
-			Wt::WContainerWidget* newButtonContainer = new Wt::WContainerWidget(dialog->contents());
-			layout->addWidget(newButtonContainer);
-			Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(newButtonContainer);
-			Wt::WPushButton* editButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::EDIT_POST)), newButtonContainer);
-			editButton->setDefault(true);
-			Wt::WPushButton* dontEditButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::CANCEL_EDITING)), newButtonContainer);
-			buttonLayout->addWidget(editButton);
-			buttonLayout->addWidget(dontEditButton);
-			buttonLayout->addStretch(1);
-
-			editButton->clicked().connect(std::bind([=] () {
-				if (nameEdit) {
-					const std::string& newAuthorName = nameEdit->text().toUTF8();
-					//if (!user::validateUsername(newAuthorName)) return;
-					if (author) {
-						author->posts_--;
-						for (unsigned int i = 0; i < (int)ratingSize; i++) {
-							author->rating_[i] -= rating_[i];
-						}
-						std::atomic_store(&ptrToSelf->author_, std::make_shared<std::string>(newAuthorName));
-					} else std::atomic_store(&ptrToSelf->author_, std::make_shared<std::string>(newAuthorName.empty() ?
-													newAuthorName : replaceVar(*tr::get(tr::GUEST_NAME), 'X', newAuthorName)));
-					std::shared_ptr<user> newAuthor = userList::get().getUser(newAuthorName);
-					if (newAuthor) {
-						newAuthor->posts_++;
-						for (unsigned int i = 0; i < (int)ratingSize; i++) {
-							author->rating_[i] += rating_[i];
-						}
-					}
-				}
-				if (sortCombo) {
-					ptrToSelf->sortBy_ = (sortPosts)sortCombo->currentIndex();
-				}
-				std::shared_ptr<std::string> newText = std::make_shared<std::string>(textArea->text().toUTF8());
-				std::atomic_store(&ptrToSelf->title_, std::make_shared<std::string>(titleEdit->text().toUTF8()));
-				std::atomic_store(&ptrToSelf->text_, newText);
-				titleWidget->setText(Wt::WString(titleEdit->text()));
+			Wt::WDialog* dialog = makePostDialog(ptrToSelf, viewing, author, true, [=] () -> void {
+				titleWidget->setText(Wt::WString(*std::atomic_load(&ptrToSelf->title_)));
 				text->clear();
-				formatString(*newText, text);
-				dialog->accept();
-			}));
-
-			dontEditButton->clicked().connect(std::bind([=] () {
-				dialog->reject();
-			}));
-
-			dialog->finished().connect(std::bind([=] () { delete dialog; }));
+				formatString(*std::atomic_load(&ptrToSelf->text_), text);
+			});
 			dialog->show();
 		}));
 	}
@@ -402,69 +437,11 @@ void lightforums::post::hideChildren(std::string viewer, Wt::WContainerWidget* c
 
 Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::string viewer, Wt::WContainerWidget* container, Wt::WContainerWidget* buttonContainer, std::shared_ptr<post> from) {
 	Wt::WPushButton* replyButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(title), 'X', from->children_.size())), buttonContainer);
-	std::shared_ptr<user> poster = userList::get().getUser(viewer);
 	replyButton->clicked().connect(std::bind([=] () {
-
-		Wt::WDialog* dialog = new Wt::WDialog(*tr::get(tr::WRITE_A_REPLY));
-		dialog->setModal(false);
-		Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
-
-		Wt::WLineEdit* nameEdit;
-		if (!poster) {
-			nameEdit = new Wt::WLineEdit(dialog->contents());
-			nameEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_AUTHOR_NAME)));
-			layout->addWidget(nameEdit);
-		}
-		Wt::WLineEdit* titleEdit = new Wt::WLineEdit(dialog->contents());
-		titleEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_POST_TITLE)));
-		titleEdit->setText(Wt::WString(replaceVar(*tr::get(tr::REPLY_TITLE), 'X', *std::atomic_load(&from->title_))));
-		layout->addWidget(titleEdit);
-		Wt::WTextArea* textArea = new Wt::WTextArea(dialog->contents());
-		textArea->setColumns(80);
-		textArea->setRows(5);
-		layout->addWidget(textArea);
-		Wt::WContainerWidget* newButtonContainer = new Wt::WContainerWidget(dialog->contents());
-		layout->addWidget(newButtonContainer);
-		Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(newButtonContainer);
-		Wt::WPushButton* postButton = new Wt::WPushButton(*tr::get(tr::POST_A_REPLY), newButtonContainer);
-		postButton->setDefault(true);
-		Wt::WPushButton* dontPostButton = new Wt::WPushButton(*tr::get(tr::CANCEL_REPLYING), newButtonContainer);
-		buttonLayout->addWidget(postButton);
-		buttonLayout->addWidget(dontPostButton);
-		buttonLayout->addStretch(1);
-
-		postButton->clicked().connect(std::bind([=] () {
-			post* reply = new post();
-			reply->title_ = std::make_shared<std::string>(titleEdit->text().toUTF8());
-			if (poster) {
-				reply->author_ = std::make_shared<std::string>(viewer);
-				poster->posts_++;
-			} else {
-				std::string nameGiven = nameEdit->text().toUTF8();
-				if (!user::validateUsername(nameGiven)) return;
-				reply->author_ = std::make_shared<std::string>(replaceVar(*tr::get(tr::GUEST_NAME), 'X', nameGiven));
-			}
-			reply->text_ = std::make_shared<std::string>(textArea->text().toUTF8());
-			reply->visibility_ = USER;
-			reply->depth_ = Settings::get().viewDepth;
-			reply->sortBy_ = Settings::get().sortBy;
-			reply->postedAt_ = time(nullptr);
-			reply->lastActivity_.store(reply->postedAt_);
-			std::shared_ptr<post> ancestor = from;
-			do {
-				ancestor->lastActivity_.store(reply->postedAt_);
-				ancestor = ancestor->parent_;
-			} while (ancestor->parent_ != ancestor);
-			reply->setParent(from);
-			showChildren(viewer, container, from, 1);
-			dialog->accept();
-		}));
-
-		dontPostButton->clicked().connect(std::bind([=] () {
-			dialog->reject();
-		}));
-
-		dialog->finished().connect(std::bind([=] () { delete dialog; }));
+		std::shared_ptr<user> poster = userList::get().getUser(viewer);
+		Wt::WDialog* dialog = makePostDialog(from, userList::get().getUser(viewer), nullptr, false, [=] () -> void {
+				showChildren(viewer, container, from, 1);
+		});
 		dialog->show();
 	}));
 	return replyButton;

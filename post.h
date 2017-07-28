@@ -144,6 +144,7 @@ namespace lightforums {
 		static void addReplyMenu(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from);
 		static Wt::WPushButton* addReplyButton(tr::translatable title, std::string viewer, Wt::WContainerWidget* container, Wt::WContainerWidget* buttonContainer, std::shared_ptr<post> from);
 		static Wt::WComboBox* makeRatingCombo(std::string viewer, Wt::WContainerWidget* container, std::shared_ptr<post> from);
+		static Wt::WDialog* makePostDialog(std::shared_ptr<post> ptrToSelf, std::shared_ptr<user> viewing, std::shared_ptr<user> author, bool edit, std::function<void ()> react);
 
 		std::shared_ptr<post> parent_;
 		unsigned long int id_;
