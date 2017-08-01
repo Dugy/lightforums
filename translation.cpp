@@ -22,6 +22,9 @@ lightforums::tr::tr()
 	original_[SET_SAVING_FREQUENCY] = "Saving frequency (in seconds)";
 	original_[SET_BACKUP_FREQUENCY] = "Backup frequency (saves per backup save)";
 	original_[SET_REPLIES_SORT] = "Sort replies:";
+	original_[SET_CAN_UPLOAD] = "Minimal rank to upload files:";
+	original_[SET_DOWNLOAD_PATH] = "Path to downloads";
+	original_[SET_UPLOAD_PATH] = "Where to save uploaded files";
 	original_[SHOW_POSTS] = "Posts: X";
 	original_[SHOW_GUEST] = "Guest";
 	original_[SHOW_REPLIES] = "Show X replies";
@@ -109,6 +112,11 @@ lightforums::tr::tr()
 	original_[REPLIES_SORT_SOMEHOW] = "Don't sort replies";
 	original_[REPLIES_SORT_BY_POST_TIME] = "Sort replies by age";
 	original_[REPLIES_SORT_BY_ACTIVITY] = "Sort replies by last activity";
+	original_[FILE_UPLOAD] = "Upload file";
+	original_[FILE_UPLOADED] = "File uploaded";
+	original_[FILE_DELETE] = "Delete file";
+	original_[FILE_DELETED] = "File deleted";
+	original_[FILE_TOO_LARGE] = "File is too large";
 }
 
 void  lightforums::tr::init(rapidxml::xml_node<char>* source) {

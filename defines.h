@@ -114,6 +114,13 @@ namespace lightforums {
 		return result;
 	}
 
+	inline std::string getSuffix(const std::string& str, const char delimeter) {
+		for (int i = (int)str.size() - 1; i >= 0; i--) {
+			if (str[i] == delimeter) return str.substr(i + 1);
+		}
+		return str; // For the case of failure
+	}
+
 #define ROT32(x, y) ((x << y) | (x >> (32 - y)))
 	static uint32_t murmur(const void* key, uint32_t len, uint32_t seed) {
 		uint32_t hash = seed;

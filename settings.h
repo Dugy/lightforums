@@ -31,6 +31,7 @@ namespace lightforums {
 		rank canEditOwn;
 		rank canEditOther;
 		rank canDeleteOwn;
+		rank canUploadFiles;
 		bool canRegister;
 		bool canBeRated[ratingSize];
 		colour rateColour[ratingSize];
@@ -41,6 +42,9 @@ namespace lightforums {
 		unsigned int savingFrequency;
 		unsigned int backupFrequency;
 		sortPosts sortBy;
+		std::shared_ptr<std::string> downloadPath;
+		std::shared_ptr<std::string> uploadPath;
+		std::atomic_uint fileOrder;
 
 	private:
 		Settings();
@@ -53,6 +57,7 @@ namespace lightforums {
 			doOnEnum((unsigned char*)&canEditOwn, USER, "can_edit_own", tr::SET_CAN_EDIT_OWN, rankSize, tr::RANK_USER);
 			doOnEnum((unsigned char*)&canDeleteOwn, USER, "can_delete_own", tr::SET_CAN_DELETE_OWN, rankSize, tr::RANK_USER);
 			doOnEnum((unsigned char*)&canEditOther, MODERATOR, "can_edit_other", tr::SET_CAN_EDIT_OTHER, rankSize, tr::RANK_USER);
+			doOnEnum((unsigned char*)&canUploadFiles, VALUED_USER, "can_upload_files", tr::SET_CAN_UPLOAD, rankSize, tr::RANK_USER);
 			doOnBool(canRegister, true, "allow_register", tr::SET_ALLOW_REGISTER);
 			for (unsigned int i = 0; i < (unsigned int)ratingSize; i++) {
 				std::string canRateName("cr" + std::to_string(i));
@@ -67,7 +72,8 @@ namespace lightforums {
 			doOnUint(savingFrequency, 3600, "saving_frequency", tr::SET_SAVING_FREQUENCY);
 			doOnUint(backupFrequency, 24, "backup_frequency", tr::SET_BACKUP_FREQUENCY);
 			doOnEnum((unsigned char*)&sortBy, SORT_BY_ACTIVITY, "sort_posts_by", tr::SET_REPLIES_SORT, sortPostsSize, tr::REPLIES_SORT_SOMEHOW);
-
+			doOnString(downloadPath, ".", "download_path", tr::SET_DOWNLOAD_PATH);
+			doOnString(uploadPath, "0.0.0.0:8080/", "upload_path", tr::SET_UPLOAD_PATH);
 		}
 
 		Settings(const Settings&) = delete;

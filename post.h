@@ -129,6 +129,7 @@ namespace lightforums {
 		sortPosts sortBy_;
 		std::atomic<time_t> postedAt_;
 		std::atomic<time_t> lastActivity_;
+		std::shared_ptr<std::vector<std::pair<unsigned int, std::string>>> files_;
 
 		atomic_unordered_map<unsigned int, std::shared_ptr<post>> children_;
 

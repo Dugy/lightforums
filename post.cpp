@@ -14,6 +14,8 @@
 #include <Wt/WMessageBox>
 #include <Wt/WComboBox>
 #include <Wt/Chart/WPieChart>
+#include <Wt/WFileUpload>
+#include <Wt/WProgressBar>
 #include "settings.h"
 #include "translation.h"
 #include "userlist.h"
@@ -76,6 +78,14 @@ lightforums::post::post(std::shared_ptr<post> parent, rapidxml::xml_node<>* node
 	else text_ = std::make_shared<std::string>("");
 	id_ = atoi(getAttribute("id"));
 	depth_ = atoi(getAttribute("depth"));
+	for (rapidxml::xml_node<>* files = node->first_node("file"); files; files = files->next_sibling("file")) {
+		rapidxml::xml_attribute<>* systemName = files->first_attribute("system");
+		rapidxml::xml_attribute<>* userName = files->first_attribute("user");
+		if (userName && systemName) {
+			if (!files_) files_ = std::make_shared<std::vector<std::pair<unsigned int, std::string>>>();
+			files_->push_back(std::make_pair(atoi(systemName->value()), std::string(userName->value())));
+		}
+	}
 	if (parent_.get() != this) parent->children_.insert(std::make_pair(id_, std::shared_ptr<post>(this)));
 
 	// Update post time of all posts this one replied to
@@ -145,10 +155,72 @@ rapidxml::xml_node<>* lightforums::post::getNode(rapidxml::xml_document<>* doc, 
 	doc->allocate_node(rapidxml::node_element, "text", text_->c_str());
 	std::shared_ptr<std::string> text(text_); // We don't want it to change while being saved
 	made->append_node(doc->allocate_node(rapidxml::node_element, "text", text->c_str()));
+	if (files_) {
+		std::shared_ptr<std::vector<std::pair<unsigned int, std::string>>> files = files_; // Local copy
+		for (unsigned int i = 0; i < files->size(); i++) {
+			std::shared_ptr<std::string> userName = std::make_shared<std::string>(files->operator [](i).second);
+			rapidxml::xml_node<>* madeFile = doc->allocate_node(rapidxml::node_element, "file");
+			madeFile->append_attribute(saveNumber("system", files->operator [](i).first));
+			madeFile->append_attribute(saveString("user", userName));
+			strings.push_back(userName);
+			made->append_node(madeFile);
+		}
+	}
 	for (auto it = children_.begin(); it != children_.end(); it++) {
 		made->append_node(it->second->getNode(doc, strings));
 	}
 	return made;
+}
+
+struct fileAddingEntry {
+	fileAddingEntry(unsigned int toFilesystem, const std::string& toUser) : fileName(std::to_string(toFilesystem)), userName(toUser), deleted(std::make_shared<bool>(false)) {}
+	fileAddingEntry() : deleted(std::make_shared<bool>(false)) {}
+//		fileAddingEntry(const fileAddingEntry& other) : fileName(other.fileName), userName(other.userName), container(other.container), upload(other.upload), button(other.button), text(other.text), deleted(std::make_shared<bool>(other.deleted)) {}
+//		~fileAddingEntry() { }
+	std::string fileName;
+	std::string userName;
+	Wt::WContainerWidget* container;
+	Wt::WFileUpload* upload;
+	Wt::WPushButton* button;
+	Wt::WText* text;
+	std::shared_ptr<bool> deleted;
+};
+
+void addUpload(Wt::WContainerWidget* uploadsContainer, std::shared_ptr<std::vector<fileAddingEntry>> files) {
+	files->push_back(fileAddingEntry());
+	files->back().container = new Wt::WContainerWidget(uploadsContainer);
+	Wt::WPushButton* button = new Wt::WPushButton(Wt::WString(*lightforums::tr::get(lightforums::tr::FILE_UPLOAD)), files->back().container);
+	files->back().button = button;
+	button->setDisabled(true);
+	Wt::WFileUpload* upload = new Wt::WFileUpload(files->back().container);
+	files->back().upload = upload;
+	upload->setFileTextSize(50); // Set the width of the widget to 50 characters
+	upload->setProgressBar(new Wt::WProgressBar());
+	Wt::WText* text = new Wt::WText(files->back().container);
+	files->back().text = text;
+	std::shared_ptr<bool> deleted = files->back().deleted;
+	button->clicked().connect(std::bind([=] () {
+		if (upload->empty()) {
+			*deleted = false;
+			text->setText(Wt::WString(""));
+			button->setText(Wt::WString(*lightforums::tr::get(lightforums::tr::FILE_DELETE)));
+			addUpload(uploadsContainer, files);
+			upload->upload();
+		} else {
+			*deleted = true;
+			text->setText(Wt::WString(*lightforums::tr::get(lightforums::tr::FILE_DELETED)));
+			button->setText(Wt::WString(*lightforums::tr::get(lightforums::tr::FILE_UPLOAD)));
+		}
+	}));
+	upload->changed().connect(std::bind( [=] {
+		button->setDisabled(false);
+	}));
+	upload->uploaded().connect(std::bind( [=] {
+		text->setText(Wt::WString(*lightforums::tr::get(lightforums::tr::FILE_UPLOADED)));
+	}));
+	upload->fileTooLarge().connect(std::bind( [=] {
+	   text->setText(Wt::WString(*lightforums::tr::get(lightforums::tr::FILE_TOO_LARGE)));
+	}));
 }
 
 Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, std::shared_ptr<user> viewing, std::shared_ptr<user> author, bool edit, std::function<void ()> react) {
@@ -181,6 +253,34 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 		layout->addWidget(sortCombo);
 	}
 
+	std::shared_ptr<std::vector<fileAddingEntry>> files = std::make_shared<std::vector<fileAddingEntry>>();
+	if (edit && ptrToSelf->files_) {
+		std::vector<std::pair<unsigned int, std::string>> fileList = *std::atomic_load(&ptrToSelf->files_);
+		for (unsigned int i = 0; i < fileList.size(); i++) {
+			files->push_back(fileAddingEntry(fileList[i].first, fileList[i].second));
+		}
+	}
+	Wt::WContainerWidget* uploadsContainer = nullptr;
+	if (viewing->rank_ >= Settings::get().canUploadFiles) {
+		uploadsContainer = new Wt::WContainerWidget(dialog->contents());
+		layout->addWidget(uploadsContainer);
+		for (unsigned int i = 0; i < files->size(); i++) {
+			files->operator[] (i).container = new Wt::WContainerWidget(uploadsContainer);
+			Wt::WContainerWidget* container = files->operator[] (i).container;
+			files->operator[] (i).button = new Wt::WPushButton(Wt::WString(*tr::get(tr::FILE_DELETE)), container);
+			std::shared_ptr<bool> deleted = files->operator[] (i).deleted;
+			files->operator[] (i).button->clicked().connect(std::bind([=] () {
+				*deleted = true;
+				system(std::string("rmdir -f " + *std::atomic_load(&Settings::get().uploadPath) + "/" +  files->operator [](i).fileName + "/" + files->operator [](i).userName).c_str());
+				delete container;
+			}));
+			files->operator[] (i).text = new Wt::WText(Wt::WString(files->operator[] (i).userName), container);
+			files->operator[] (i).upload = nullptr;
+		}
+		addUpload(uploadsContainer, files);
+	}
+
+
 	Wt::WContainerWidget* newButtonContainer = new Wt::WContainerWidget(dialog->contents());
 	layout->addWidget(newButtonContainer);
 	Wt::WHBoxLayout* buttonLayout = new Wt::WHBoxLayout(newButtonContainer);
@@ -192,6 +292,29 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 	buttonLayout->addStretch(1);
 
 	okButton->clicked().connect(std::bind([=] () {
+		std::shared_ptr<std::vector<std::pair<unsigned int, std::string>>> newFiles(nullptr);
+		if (uploadsContainer) {
+			newFiles = std::make_shared<std::vector<std::pair<unsigned int, std::string>>>();
+			for (unsigned int i = 0; i < files->size(); i++) {
+				if (!*files->operator[] (i).deleted) {
+					if (files->operator[] (i).fileName.empty() && files->operator[] (i).upload && !files->operator[] (i).upload->spoolFileName().empty()) {
+						const std::string& filePath = files->operator[] (i).upload->spoolFileName();
+						int fileIndex = Settings::get().fileOrder++;
+						const std::string& fileName = std::to_string(fileIndex);
+						const std::string& userName = files->operator[] (i).upload->clientFileName().toUTF8(); //TODO: give it a better name, there is no assurance Wt makes no duplicities
+						newFiles->push_back(std::make_pair(fileIndex, userName));
+						files->operator[] (i).upload->stealSpooledFile();
+						system(std::string("mkdir " + *std::atomic_load(&Settings::get().uploadPath) + "/" + fileName).c_str());
+						system(std::string("mv " + filePath + " " + *std::atomic_load(&Settings::get().uploadPath) + "/" + fileName + "/" + userName).c_str());
+
+					} else if (!files->operator[] (i).fileName.empty()) {
+						newFiles->push_back(std::make_pair(std::stoi(files->operator[] (i).fileName), files->operator[] (i).userName));
+					}
+				} else if (!files->operator[] (i).fileName.empty()) {
+					system(std::string("rm " + files->operator[] (i).fileName).c_str());
+				}
+			}
+		}
 		if (edit) {
 			if (nameEdit) {
 				const std::string& newAuthorName = nameEdit->text().toUTF8();
@@ -218,6 +341,7 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 			std::shared_ptr<std::string> newText = std::make_shared<std::string>(textArea->text().toUTF8());
 			std::atomic_store(&ptrToSelf->title_, std::make_shared<std::string>(titleEdit->text().toUTF8()));
 			std::atomic_store(&ptrToSelf->text_, newText);
+			std::atomic_store(&ptrToSelf->files_, newFiles);
 		} else {
 			post* reply = new post();
 			reply->title_ = std::make_shared<std::string>(titleEdit->text().toUTF8());
@@ -235,6 +359,7 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 			reply->sortBy_ = Settings::get().sortBy;
 			reply->postedAt_ = time(nullptr);
 			reply->lastActivity_.store(reply->postedAt_);
+			reply->files_ = newFiles;
 			std::shared_ptr<post> ancestor = ptrToSelf;
 			do {
 				ancestor->lastActivity_.store(reply->postedAt_);
@@ -315,6 +440,9 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 		deleteButton->clicked().connect(std::bind([=] () {
 
 			areYouSureBox(*tr::get(tr::DELETE_POST), *tr::get(tr::DO_DELETE_POST), [=] () -> void {
+				for (unsigned int i = 0; i < ptrToSelf->files_->size(); i++) {
+					system(std::string("rmdir -f " + *std::atomic_load(&Settings::get().uploadPath) + "/" + std::to_string(ptrToSelf->files_->operator [](i).first) + "/" + ptrToSelf->files_->operator [](i).second).c_str());
+				}
 				ptrToSelf->parent_->children_.erase(ptrToSelf->id_);
 				if (author) author->posts_--;
 				delete result;
@@ -332,6 +460,18 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 	} else if (Settings::get().postShowRating == Settings::SHOW_SMALL) {
 		Wt::WText* ratingText = makeRatingOverview(rating_, titleContainer);
 		titleLayout->addWidget(ratingText);
+	}
+
+	Wt::WContainerWidget* fileArea;
+	std::shared_ptr<std::vector<std::pair<unsigned int, std::string>>> files = files_;
+	if (files) {
+		fileArea = new Wt::WContainerWidget(textArea);
+		textLayout->addWidget(fileArea);
+		for (unsigned int i = 0; i < files->size(); i++) {
+			std::string downloadPath(*std::atomic_load(&Settings::get().downloadPath) + "/" + std::to_string(files->operator [](i).first) + "/" + files->operator [](i).second);
+			new Wt::WAnchor(Wt::WLink(downloadPath), Wt::WString(files->operator [](i).second), fileArea);
+			new Wt::WText(" ", fileArea);
+		}
 	}
 
 	std::shared_ptr<post> copy = self();
@@ -439,7 +579,7 @@ Wt::WPushButton* lightforums::post::addReplyButton(tr::translatable title, std::
 	Wt::WPushButton* replyButton = new Wt::WPushButton(Wt::WString(replaceVar(*tr::get(title), 'X', from->children_.size())), buttonContainer);
 	replyButton->clicked().connect(std::bind([=] () {
 		std::shared_ptr<user> poster = userList::get().getUser(viewer);
-		Wt::WDialog* dialog = makePostDialog(from, userList::get().getUser(viewer), nullptr, false, [=] () -> void {
+		Wt::WDialog* dialog = makePostDialog(from, poster, nullptr, false, [=] () -> void {
 				showChildren(viewer, container, from, 1);
 		});
 		dialog->show();

@@ -12,6 +12,62 @@
 volatile bool exiting = false;
 volatile bool readyToExit = false;
 
+#ifdef __linux__
+
+#include <ucontext.h>
+
+#ifdef __x86_64__
+#define REG_EIP REG_RIP
+#endif
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <execinfo.h>
+#include <signal.h>
+void segfaultHandler(int sig, siginfo_t* info, void* secret) {
+	void* trace[30];
+	char** messages = (char**)NULL;
+	int i, trace_size = 0;
+	ucontext_t *uc = (ucontext_t*)secret;
+
+	/* Do something useful with siginfo_t */
+	std::string outputFile = "backtrace_" + std::to_string(time(NULL));
+	std::cerr << "Crash report writing to " << outputFile << std::endl;
+
+	auto ptrToString = [] (const void* arg) -> std::string {
+		std::stringstream stream;
+		stream << arg;
+		return stream.str();
+	};
+	if (sig == SIGSEGV)
+		system(std::string("echo \"Got signal " + std::to_string(sig) + ", faulty address is " + ptrToString(info->si_addr) + ", from " + ptrToString((void*)uc->uc_mcontext.gregs[REG_EIP]) + "\" >> " + outputFile).c_str());
+	else
+		system(std::string("echo \"Got signal " + std::to_string(sig) + "\" >> " + outputFile).c_str());
+
+	trace_size = backtrace(trace, 30);
+	/* overwrite sigaction with caller's address */
+	trace[1] = (void *) uc->uc_mcontext.gregs[REG_EIP];
+
+	messages = backtrace_symbols(trace, trace_size);
+	/* skip first stack frame (points here) */
+	system(std::string("echo \"Execution path\" >> " + outputFile).c_str());
+	for (i = 1; i < trace_size; i++) {
+		system(std::string("echo \"[bt] " + std::string(messages[i]) + "\" >> " + outputFile).c_str());
+	}
+
+	system(std::string("echo \"[bt]More detailed:\" >> " + outputFile).c_str());
+
+	for (i = 1; i < trace_size; i++) {
+		size_t p = 0;
+		while (messages[i][p] != '(' && messages[i][p] != ' ' && messages[i][p] != 0) p++;
+		system(std::string("addr2line " + ptrToString(trace[i]) + " -e " + std::string(messages[i]).substr(0, p) + " >> " + outputFile).c_str());
+	}
+	kill(getpid(), SIGTERM);
+	exit(1); // For the case if kill fails somehow
+}
+
+#endif
+
 void setupStructures(const std::string& fileName) {
 	std::ifstream in(fileName);
 	if (in.is_open()) {
@@ -80,8 +136,16 @@ void saveStructures(const std::string& fileName) {
 	}
 	root->append_node(cookiesSaved);
 
+#ifdef __linux__
 	system(std::string("mv " + fileName + ".old " + fileName + ".very_old").c_str());
 	system(std::string("mv " + fileName + " " + fileName + ".old").c_str());
+#elif __APPLE__
+	system(std::string("mv " + fileName + ".old " + fileName + ".very_old").c_str());
+	system(std::string("mv " + fileName + " " + fileName + ".old").c_str());
+#elif _WIN32
+	system(std::string("move " + fileName + ".old " + fileName + ".very_old").c_str());
+	system(std::string("move " + fileName + " " + fileName + ".old").c_str());
+#endif
 	std::cerr << "Saved as " << fileName << std::endl;
 
 	std::ofstream out(fileName);
@@ -116,6 +180,15 @@ Wt::WApplication* createApplication(const Wt::WEnvironment& env)
 
 int main(int argc, char** argv)
 {
+#ifdef __linux__
+	struct sigaction sa;
+
+	sa.sa_sigaction = segfaultHandler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESTART | SA_SIGINFO;
+
+	sigaction(SIGSEGV, &sa, NULL);
+#endif
 	setupStructures("saved_data.xml");
 	std::thread backupThread(saveOccasionally);
 	int result = Wt::WRun(argc, argv, &createApplication);
