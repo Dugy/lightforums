@@ -425,6 +425,7 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int depth, bool showParentLink) {
 	std::shared_ptr<user> viewing = userList::get().getUser(viewer);
 	if ((!viewing && visibility_ > USER) || (viewing && viewing->rank_ < visibility_)) return nullptr;
+	std::shared_ptr<post> ptrToSelf = self(); // To prevent the post from being distroyed at inappropriate time
 
 	std::shared_ptr<std::string> authorName = std::atomic_load(&author_);
 	std::shared_ptr<user> author = userList::get().getUser(*authorName);
@@ -446,7 +447,8 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 	titleContainer->setStyleClass("lightforums-titlebar");
 	Wt::WHBoxLayout* titleLayout = new Wt::WHBoxLayout(titleContainer);
 	textLayout->addWidget(titleContainer);
-	Wt::WAnchor* titleWidget = new Wt::WAnchor(Wt::WLink(Wt::WLink::InternalPath, "/" POST_PATH_PREFIX "/" + postPath(self()).getString()), Wt::WString(*std::atomic_load(&title_)), textArea);
+	std::string titleString(ptrToSelf->pin_ ? replaceVar(tr::get(tr::PINNED_AFFIX), 'X', *std::atomic_load(&title_)) : *std::atomic_load(&title_));
+	Wt::WAnchor* titleWidget = new Wt::WAnchor(Wt::WLink(Wt::WLink::InternalPath, "/" POST_PATH_PREFIX "/" + postPath(ptrToSelf).getString()), Wt::WString(titleString), textArea);
 	titleLayout->addWidget(titleWidget);
 	titleLayout->addStretch(1);
 
@@ -459,8 +461,6 @@ Wt::WContainerWidget* lightforums::post::build(const std::string& viewer, int de
 		textLayout->addWidget(nextToTextArea, 1);
 	}
 	Wt::WContainerWidget* text = new Wt::WContainerWidget(showChart ? nextToTextArea : textArea);
-
-	std::shared_ptr<post> ptrToSelf = self(); // To prevent the post from being distroyed at inappropriate time
 
 	if (viewing && ((author == viewing && viewing->rank_ >= Settings::get().canEditOwn) || (viewing->rank_ > Settings::get().canEditOther && (!author || viewing->rank_ > author->rank_)) || viewing->rank_ == ADMIN)) {
 		Wt::WPushButton* editButton = new Wt::WPushButton(Wt::WString(*tr::get(tr::EDIT_POST)), titleContainer);

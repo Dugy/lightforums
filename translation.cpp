@@ -119,6 +119,7 @@ lightforums::tr::tr()
 	original_[FILE_TOO_LARGE] = "File is too large";
 	original_[PIN] = "Pin:";
 	original_[WRITE_PIN_HERE] = "Write pin order here";
+	original_[PINNED_AFFIX] = "(Pinned) X";
 }
 
 void  lightforums::tr::init(rapidxml::xml_node<char>* source) {

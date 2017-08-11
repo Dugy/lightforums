@@ -120,6 +120,7 @@ namespace lightforums {
 			FILE_TOO_LARGE,
 			PIN,
 			WRITE_PIN_HERE,
+			PINNED_AFFIX,
 			translatableMax,
 		};
 
