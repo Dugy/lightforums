@@ -38,7 +38,7 @@ namespace lightforums {
 
 		static bool validateUsername(const std::string& name, bool warn = true);
 
-		std::string getTitle();
+		std::string getTitle() const;
 		void setTitle(const std::string& newName) { title_ = std::make_shared<std::string>(newName); }
 
 	private:

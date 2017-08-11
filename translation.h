@@ -118,6 +118,8 @@ namespace lightforums {
 			FILE_DELETE,
 			FILE_DELETED,
 			FILE_TOO_LARGE,
+			PIN,
+			WRITE_PIN_HERE,
 			translatableMax,
 		};
 

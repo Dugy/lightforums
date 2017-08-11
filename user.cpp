@@ -87,7 +87,7 @@ rapidxml::xml_node<char>* lightforums::user::getNode(rapidxml::xml_document<char
 	return made;
 }
 
-std::string lightforums::user::getTitle() {
+std::string lightforums::user::getTitle() const {
 	return title_ ? *std::atomic_load(&title_) : "";
 }
 
@@ -95,7 +95,7 @@ Wt::WContainerWidget* lightforums::user::makeOverview() const {
 	Wt::WContainerWidget* result = new Wt::WContainerWidget();
 	std::string& username = *std::atomic_load(&name_);
 	Wt::WAnchor* nameWidget = new Wt::WAnchor(Wt::WLink(Wt::WLink::InternalPath, "/" USER_PATH_PREFIX "/" + username), Wt::WString(username), result);
-	Wt::WText* titleWidget = new Wt::WText(Wt::WString(*std::atomic_load(&title_)), result);
+	Wt::WText* titleWidget = new Wt::WText(Wt::WString(getTitle()), result);
 	Wt::WText* postsWidget = new Wt::WText(Wt::WString(replaceVar(tr::get(tr::SHOW_POSTS), 'X', posts_)), result);
 	Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(result);
 	layout->addSpacing(Wt::WLength::Auto);

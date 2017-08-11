@@ -71,6 +71,7 @@ lightforums::post::post(std::shared_ptr<post> parent, rapidxml::xml_node<>* node
 	author_ = std::make_shared<std::string>(getAttribute("author"));
 	visibility_ = (rank)atoi(getAttribute("visibility"));
 	postedAt_ = (time_t)atoi(getAttribute("posted_at"));
+	if (node->first_attribute("pin")) pin_ = std::make_shared<std::string>(node->first_attribute("pin")->value());
 	lastActivity_.store(postedAt_);
 	sortBy_ = (sortPosts)atoi(getAttribute("sort_by"));
 	rapidxml::xml_node<>* textNode = node->first_node("text");
@@ -147,6 +148,7 @@ rapidxml::xml_node<>* lightforums::post::getNode(rapidxml::xml_document<>* doc, 
 	rapidxml::xml_node<>* made = doc->allocate_node(rapidxml::node_element, "post");
 	made->append_attribute(saveString("title", title_));
 	made->append_attribute(saveString("author", author_));
+	if (pin_) made->append_attribute(saveString("pin", pin_));
 	made->append_attribute(saveNumber("id", id_));
 	made->append_attribute(saveNumber("visibility", visibility_.load()));
 	made->append_attribute(saveNumber("depth", depth_.load()));
@@ -229,10 +231,13 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 	Wt::WVBoxLayout* layout = new Wt::WVBoxLayout(dialog->contents());
 
 	Wt::WLineEdit* nameEdit = nullptr;
-	if (viewing->rank_ == ADMIN || ((!viewing) && !edit)) {
+	if ((viewing && viewing->rank_ == ADMIN) || !viewing) {
 		nameEdit = new Wt::WLineEdit(dialog->contents());
 		nameEdit->setPlaceholderText(Wt::WString(*tr::get(tr::USER_NAME)));
-		nameEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->author_)));
+		if (edit)
+			nameEdit->setText(Wt::WString(*std::atomic_load(&ptrToSelf->author_)));
+		else if (viewing && viewing->rank_ == ADMIN)
+			nameEdit->setText(Wt::WString(*std::atomic_load(&viewing->name_)));
 		layout->addWidget(nameEdit);
 	}
 
@@ -247,10 +252,36 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 	textArea->setRows(5);
 	layout->addWidget(textArea);
 
+	Wt::WContainerWidget* extraStuff = new Wt::WContainerWidget(dialog->contents());
+	layout->addWidget(extraStuff);
+	Wt::WGridLayout* extraStuffLayout = new Wt::WGridLayout(extraStuff);
+	int extraStuffOrder = 0;
+	auto addExtraForm = [&] (Wt::WWidget* added, std::shared_ptr<const std::string> title = nullptr) {
+		if (title) {
+			Wt::WContainerWidget* couple = new Wt::WContainerWidget(extraStuff);
+			new Wt::WText(Wt::WString(*title), couple);
+			couple->addWidget(added);
+			extraStuffLayout->addWidget(couple, extraStuffOrder / 2, extraStuffOrder % 2);
+		} else {
+			extraStuffLayout->addWidget(added, extraStuffOrder / 2, extraStuffOrder % 2);
+		}
+		extraStuffOrder++;
+	};
+
 	Wt::WComboBox* sortCombo = nullptr;
-	if (viewing->rank_ == ADMIN) {
+	if (viewing && viewing->rank_ == ADMIN) {
 		sortCombo = makeEnumEditor((unsigned char*)&ptrToSelf->sortBy_, sortPostsSize, tr::REPLIES_SORT_SOMEHOW, dialog->contents());
-		layout->addWidget(sortCombo);
+		addExtraForm(sortCombo);
+	}
+
+	// Add tag edit here
+	Wt::WLineEdit* pinEdit = nullptr;
+	if (viewing && viewing->rank_ == ADMIN) {
+		pinEdit = new Wt::WLineEdit();
+		pinEdit->setPlaceholderText(Wt::WString(*tr::get(tr::WRITE_PIN_HERE)));
+		std::shared_ptr<std::string> current = ptrToSelf->pin_;
+		if (current) pinEdit->setText(Wt::WString(*current));
+		addExtraForm(pinEdit, tr::get(tr::PIN));
 	}
 
 	std::shared_ptr<std::vector<fileAddingEntry>> files = std::make_shared<std::vector<fileAddingEntry>>();
@@ -261,7 +292,7 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 		}
 	}
 	Wt::WContainerWidget* uploadsContainer = nullptr;
-	if (viewing->rank_ >= Settings::get().canUploadFiles) {
+	if (viewing && viewing->rank_ >= Settings::get().canUploadFiles) {
 		uploadsContainer = new Wt::WContainerWidget(dialog->contents());
 		layout->addWidget(uploadsContainer);
 		for (unsigned int i = 0; i < files->size(); i++) {
@@ -306,6 +337,7 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 						files->operator[] (i).upload->stealSpooledFile();
 						system(std::string("mkdir " + *std::atomic_load(&Settings::get().uploadPath) + "/" + fileName).c_str());
 						system(std::string("mv " + filePath + " " + *std::atomic_load(&Settings::get().uploadPath) + "/" + fileName + "/" + userName).c_str());
+						system(std::string("chmod 744 " + *std::atomic_load(&Settings::get().uploadPath) + "/" + fileName + "/" + userName).c_str());
 
 					} else if (!files->operator[] (i).fileName.empty()) {
 						newFiles->push_back(std::make_pair(std::stoi(files->operator[] (i).fileName), files->operator[] (i).userName));
@@ -331,12 +363,20 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 				if (newAuthor) {
 					newAuthor->posts_++;
 					for (unsigned int i = 0; i < (int)ratingSize; i++) {
-						author->rating_[i] += ptrToSelf->rating_[i];
+						newAuthor->rating_[i] += ptrToSelf->rating_[i];
 					}
 				}
+				std::atomic_store(&ptrToSelf->author_, std::make_shared<std::string>(newAuthorName));
 			}
 			if (sortCombo) {
 				ptrToSelf->sortBy_ = (sortPosts)sortCombo->currentIndex();
+			}
+			if (pinEdit) {
+				const std::string& got = pinEdit->text().toUTF8();
+				if (got.empty())
+					ptrToSelf->pin_.reset();
+				else
+					std::atomic_store(&ptrToSelf->pin_, std::make_shared<std::string>(got));
 			}
 			std::shared_ptr<std::string> newText = std::make_shared<std::string>(textArea->text().toUTF8());
 			std::atomic_store(&ptrToSelf->title_, std::make_shared<std::string>(titleEdit->text().toUTF8()));
@@ -546,11 +586,25 @@ void lightforums::post::showChildren(std::string viewer, Wt::WContainerWidget* c
 		std::vector<std::shared_ptr<post>> posts;
 		for (auto it = from->children_.begin(); it != from->children_.end(); it++) posts.push_back(it->second);
 		if (from->sortBy_ == SORT_BY_ACTIVITY) {
-			std::sort(posts.begin(), posts.end(), [] (const std::shared_ptr<post>& a, const std::shared_ptr<post>& b) -> bool
-			{ return a->lastActivity_ > b->lastActivity_; });
+			std::sort(posts.begin(), posts.end(), [] (const std::shared_ptr<post>& a, const std::shared_ptr<post>& b) -> bool {
+				if (!a->pin_) {
+					if (!b->pin_) return a->lastActivity_ > b->lastActivity_;
+					else return false;
+				} else {
+					if (!b->pin_) return true;
+					else return *a->pin_ < *b->pin_;
+				}
+			});
 		} else {
-			std::sort(posts.begin(), posts.end(), [] (const std::shared_ptr<post>& a, const std::shared_ptr<post>& b) -> bool
-			{ return a->postedAt_ > b->postedAt_; });
+			std::sort(posts.begin(), posts.end(), [] (const std::shared_ptr<post>& a, const std::shared_ptr<post>& b) -> bool{
+				if (!a->pin_) {
+					if (!b->pin_) return a->postedAt_ > b->postedAt_;
+					else return false;
+				} else {
+					if (!b->pin_) return true;
+					else return *a->pin_ < *b->pin_;
+				}
+			});
 		}
 		for (unsigned int i = 0; i < posts.size(); i++) {
 			addChild(posts[i]);

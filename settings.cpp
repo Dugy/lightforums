@@ -70,7 +70,7 @@ void lightforums::Settings::setup(rapidxml::xml_node<>* from) {
 		}
 	};
 	goThroughAll(doOnBool, doOnUint, doOnULint, doOnString, doOnEnum);
-	if (from->first_node("file_order")) fileOrder.store(atoi(from->first_node("file_order")->value()));
+	if (from && from->first_node("file_order")) fileOrder.store(atoi(from->first_node("file_order")->value()));
 }
 
 rapidxml::xml_node<>* lightforums::Settings::save(rapidxml::xml_document<>* doc, std::vector<std::shared_ptr<std::string>>& strings) {

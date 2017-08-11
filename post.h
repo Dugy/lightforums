@@ -131,6 +131,8 @@ namespace lightforums {
 		std::atomic<time_t> lastActivity_;
 		std::shared_ptr<std::vector<std::pair<unsigned int, std::string>>> files_;
 
+		std::shared_ptr<std::string> pin_;
+
 		atomic_unordered_map<unsigned int, std::shared_ptr<post>> children_;
 
 		unsigned int getId() { return id_; }
