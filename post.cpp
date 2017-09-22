@@ -400,6 +400,11 @@ Wt::WDialog* lightforums::post::makePostDialog(std::shared_ptr<post> ptrToSelf, 
 			reply->postedAt_ = time(nullptr);
 			reply->lastActivity_.store(reply->postedAt_);
 			reply->files_ = newFiles;
+			if (pinEdit) {
+				const std::string& got = pinEdit->text().toUTF8();
+				if (!got.empty())
+					reply->pin_ = std::make_shared<std::string>(got);
+			}
 			std::shared_ptr<post> ancestor = ptrToSelf;
 			do {
 				ancestor->lastActivity_.store(reply->postedAt_);
